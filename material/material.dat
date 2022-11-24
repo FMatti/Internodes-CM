@@ -1,0 +1,11 @@
+material elastic [
+         name = test
+         rho = 2500 # density
+         E   = 30e9 # young's modulu
+         nu  = 0.2 # poisson's ratio
+]
+
+contact_detector [
+  master = lower_top 
+  slave = upper_bottom
+]
