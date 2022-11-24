@@ -323,7 +323,7 @@ class ContactMechanicsInternodes(object):
         self.nodes_candidate_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
         
         # Nodes, positions, and corresponding dofs of primary/secondary interface
-        self.nodes_interface_primary = mesh.getElementGroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
+        self.nodes_interface_primary = mesh.getelementgroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
         self.nodes_interface_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
         self.positions_interface_primary = mesh.getNodes()[self.nodes_interface_primary]
         self.positions_interface_secondary = mesh.getNodes()[self.nodes_interface_secondary]
