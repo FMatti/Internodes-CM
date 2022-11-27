@@ -323,7 +323,7 @@ class ContactMechanicsInternodes(object):
         self.nodes_candidate_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
         
         # Nodes, positions, and corresponding dofs of primary/secondary interface
-        self.nodes_interface_primary = mesh.getelementgroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
+        self.nodes_interface_primary = mesh.getElementGroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
         self.nodes_interface_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
         self.positions_interface_primary = mesh.getNodes()[self.nodes_interface_primary]
         self.positions_interface_secondary = mesh.getNodes()[self.nodes_interface_secondary]
@@ -339,7 +339,7 @@ class ContactMechanicsInternodes(object):
         self.dofs_free = self.dofs[~blocked_dofs.ravel()]
 
         # Connectivity of the model (line segments and triangular elements)
-        self.nodes_segments = mesh.getConnectivity(aka._segment_2)
+        self.nodes_segments = mesh.getConnectivity(aka._segment_3)
         self.nodes_triangles = mesh.getConnectivity(aka._triangle_3)
 
         # Radial basis function and the corresponding radius parameters
@@ -633,7 +633,7 @@ class ContactMechanicsInternodes(object):
             normals_avg[j] = np.sum(normals[id] / np.linalg.norm(normals[id], axis=1)[:, np.newaxis], axis=0)
 
             """
-            # This below algorithm is unnecessary if meshed right!
+            # This below steps are unnecessary if mesh oriented correctly!
             step_size=1e-3
 
             # Compute average normal on interface boundary
@@ -655,7 +655,7 @@ class ContactMechanicsInternodes(object):
 
         return normals_avg
 
-    def detect_penetration_nodes(self, positions_new, normals_candidates_primary, normals_candidates_secondary, tolerance=0.9, mesh_size=0.05):
+    def detect_penetration_nodes(self, positions_new, normals_candidates_primary, normals_candidates_secondary, tolerance=0.9, mesh_size=0.1):
         """Detect the nodes on secondary and primary interface that penetrate.
         TODO: Require reference and make mesh size configurable!!
 
