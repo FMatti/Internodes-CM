@@ -339,8 +339,11 @@ class ContactMechanicsInternodes(object):
         self.dofs_free = self.dofs[~blocked_dofs.ravel()]
 
         # Connectivity of the model (line segments and triangular elements)
-        self.nodes_segments = mesh.getConnectivity(aka._segment_3)
-        self.nodes_triangles = mesh.getConnectivity(aka._triangle_3)
+        triangles = mesh.getConnectivity(aka._triangle_3)
+        if self.dim == 2:
+            self.connectivity = triangles[:, np.array([0, 1, 0, 2, 1, 2])].reshape(-1, 2)
+        elif self.dim == 3:
+            self.connectivity = triangles
 
         # Radial basis function and the corresponding radius parameters
         self.rbf = rbf
@@ -544,14 +547,12 @@ class ContactMechanicsInternodes(object):
         [2], Page 23, Algorithm 2, Lines 5-16
         """
         # Get connectivities (triangle/segment indices) between candidate nodes
-        segments_candidate_primary = remove_rows_without_all_items(self.nodes_segments, self.nodes_candidate_primary)
-        segments_candidate_secondary = remove_rows_without_all_items(self.nodes_segments, self.nodes_candidate_secondary)
-        triangles_candidate_primary = remove_rows_without_all_items(self.nodes_triangles, self.nodes_candidate_primary)
-        triangles_candidate_secondary = remove_rows_without_all_items(self.nodes_triangles, self.nodes_candidate_secondary)
-
+        connectivity_candidate_primary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_primary)
+        connectivity_candidate_secondary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_secondary)
+        
         # Compute the normals
-        normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, segments_candidate_primary, triangles_candidate_primary)
-        normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, segments_candidate_secondary, triangles_candidate_secondary)
+        normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, connectivity_candidate_primary)
+        normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, connectivity_candidate_secondary)
         normals_interface_primary = normals_candidate_primary[np.in1d(self.nodes_candidate_primary, self.nodes_interface_primary)]
         normals_interface_secondary = normals_candidate_secondary[np.in1d(self.nodes_candidate_secondary, self.nodes_interface_secondary)]
 
@@ -589,7 +590,7 @@ class ContactMechanicsInternodes(object):
 
         return False
 
-    def compute_normals(self, positions_new, nodes, segments, triangles):
+    def compute_normals(self, positions_new, nodes, connectivity):
         """Compute the normals.
 
         Parameters
@@ -613,21 +614,18 @@ class ContactMechanicsInternodes(object):
 
         # Compute tangents corresponding to the elements at new positions
         if self.dim == 2:
-            tangent1 = positions_new[segments[:, 1]] - positions_new[segments[:, 0]]
+            tangent1 = positions_new[connectivity[:, 1]] - positions_new[connectivity[:, 0]]
             tangent2 = [0, 0, 1]
         elif self.dim == 3:
-            tangent1 = positions_new[triangles[:, 1]] - positions_new[triangles[:, 0]]
-            tangent2 = positions_new[triangles[:, 2]] - positions_new[triangles[:, 0]]
+            tangent1 = positions_new[connectivity[:, 1]] - positions_new[connectivity[:, 0]]
+            tangent2 = positions_new[connectivity[:, 2]] - positions_new[connectivity[:, 0]]
 
         # Compute normal vectors
         normals = np.cross(tangent1, tangent2)[:, :self.dim]
 
         normals_avg = np.zeros((len(nodes), self.dim))
         for j, node in enumerate(nodes):
-            if self.dim == 2:
-                id = np.isin(segments, node).any(axis=1)
-            elif self.dim == 3:
-                id = np.isin(triangles, node).any(axis=1)
+            id = np.isin(connectivity, node).any(axis=1)
 
             # Compute average surface normal for each candidate node
             normals_avg[j] = np.sum(normals[id] / np.linalg.norm(normals[id], axis=1)[:, np.newaxis], axis=0)
