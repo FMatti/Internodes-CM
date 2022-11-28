@@ -3,7 +3,7 @@ import numpy as np
 
 from contact_mechanics_internodes import *
 
-def test_construct_interpolation_matrix():
+def test_construct_interpolation_matrix_constant():
 
     # Test if constant function is interpolated exactly
     positions = np.array([1, 2, 3])
@@ -14,6 +14,8 @@ def test_construct_interpolation_matrix():
     f = lambda x : np.ones_like(x)
     np.testing.assert_allclose(R * f(positions_ref), f(positions), rtol=1e-10)
 
+def test_construct_interpolation_matrix_polynomial():
+
     # Test if polynomial is interpolated well enough
     positions = np.linspace(0.05, 0.95, 10)
     positions_ref = np.linspace(0, 1, 11)
@@ -22,6 +24,18 @@ def test_construct_interpolation_matrix():
     R = construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf)
     f = lambda x : x**3 + x**2 + x + 1
     np.testing.assert_allclose(R * f(positions_ref), f(positions), rtol=1e-2)
+
+def test_construct_interpolation_matrix_nodalgap():
+
+    # Test if polynomial is interpolated well enough
+    positions = np.linspace(0.05, 0.95, 10)
+    positions_ref = np.linspace(0, 1, 11)
+    radiuses_ref = 1e-1*np.ones_like(positions_ref)
+    rbf = wendland_rbf
+    R = construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf)
+    f = lambda x : x**3 + x**2 + x + 1
+    np.testing.assert_allclose(R * f(positions_ref), f(positions), rtol=1e-2)
+    nodal_gaps_primary = R12 * positions_interface_secondary - positions_interface_primary
 
 def test_find_interface_nodes():
 
