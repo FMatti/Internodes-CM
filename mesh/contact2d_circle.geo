@@ -1,13 +1,13 @@
-l = 0.1; // Target mesh size
+l = 0.2; // Target mesh size
 
-lx = 1; // x-sidelength of cuboid
+lx = 2; // x-sidelength of cuboid
 ly = 0.5; // y-sidelength of cuboid
 
 r = 0.5; // Radius of the circle
-d = 0.05; // Initial penetration of sphere
+d = 0.05; // Initial penetration overlap of sphere
 
 a = 0.4; // Maximum expected radius of contact area
-n = 20; // Number of mesh nodes along maximum expected interface
+n = 20; // Number of mesh refinements for candidates
 
 
 // ---> PRIMARY

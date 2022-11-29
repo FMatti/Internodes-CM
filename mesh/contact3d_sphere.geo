@@ -1,4 +1,4 @@
-l = 0.3; // Target mesh size 
+l = 0.2; // Target mesh size 
 
 lx = 2; // x-sidelength of cuboid
 ly = 0.5; // y-sidelength of cuboid
