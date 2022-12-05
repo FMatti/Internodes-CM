@@ -155,7 +155,7 @@ def _check_rbf_radius_parameters(positions, positions_ref, rbf_radius_parameters
     n_supports_interpolation = np.sum(distance_matrix_MM < rbf_radius_parameters, axis=0)
     assert np.max(n_supports_interpolation) < 1 / wendland(c)
 
-def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=wendland):
+def compute_rbf_radius_parameters(positions, positions_ref, rbf=wendland, c=0.5):
     """Iteratively compute radius parameters for radial basis functions until
     invertibility conditions are satisfied (increase 'c' in every iteration).
 
@@ -168,11 +168,6 @@ def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=w
     c : float in (0, 1), default is 0.5
         [1], Page 51, Section 2.3, Equation 2
         (The empirical default value is given at the right on same page)
-    C : float in (c, 1), default is 0.5
-        [1], Page 51, Section 2.3, Equation 3
-        (The empirical default value is given at the bottom right on same page)
-    max_iter : int, default is 10
-        Maximum number of iterations for finding suitable radius parameters.
     rbf : function, default is wendland
         The radial basis function being used.
 
@@ -180,9 +175,6 @@ def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=w
     -------
     rbf_radius_parameters : np.ndarray
         The radius parameters to use in the radial basis function.
-    n_supports_reference : np.ndarray
-        Number of radial basis functions to whose "shrunk" support (by factor C)
-        each reference node belongs ([1], Page 51, Section 2.3, Equation 3)
 
     Reference
     ---------
@@ -191,12 +183,12 @@ def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=w
     # Compute distance matrices among nodes and from nodes to reference nodes:
     # distance_matrix(X, Y)[i, j] = ||x_i - y_j||
     distance_matrix_MM = sp.spatial.distance.cdist(positions, positions)
-    distance_matrix_NM = sp.spatial.distance.cdist(positions_ref, positions)
+    #distance_matrix_NM = sp.spatial.distance.cdist(positions_ref, positions)
 
     # Minimum distance of each node from closest distinct interpolation node
     np.fill_diagonal(distance_matrix_MM, np.inf)
     min_distance_MM = np.min(distance_matrix_MM, axis=0)
-    
+
     # Extremely heuristic: Estimate for the minimum distance of the nodes
     # from the reference nodes (min_distance_MM/2 is supposed to be
     # representative of the distance an orthogonal projection of the
@@ -222,7 +214,7 @@ def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=w
 
         # Number of radial basis functions in whose support reference nodes are
         # belong (support is shrunk by C: [1], Page 51, Section 2.3, Equation 3)
-        n_supports_reference = np.sum(distance_matrix_NM < C*rbf_radius_parameters, axis=0)
+        # n_supports_reference = np.sum(distance_matrix_NM < C*rbf_radius_parameters, axis=0)
 
         # Number radial basis functions in whose support interpolation nodes are
         n_supports_interpolation = np.sum(distance_matrix_MM < rbf_radius_parameters, axis=0)
@@ -234,12 +226,12 @@ def compute_rbf_radius_parameters(positions, positions_ref, c=0.5, C=0.95, rbf=w
 
         # If criterion was not satisfied, increase c and reiterate the procedure
         c = (c + 1) / 2
-        if c >= C:
-            ValueError("Tried to increase c to", c, "which is larger than C.")
+        if c >= 1:
+            ValueError("Tried to increase c to", c, "which is larger than 1.")
 
-    return rbf_radius_parameters, n_supports_reference
+    return rbf_radius_parameters
 
-def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, nodes_secondary, rbf=wendland):
+def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, nodes_secondary, rbf=wendland, C=0.95):
     """Find contact/interface nodes while trying to satisfy the constraints.
 
     Parameters
@@ -250,10 +242,13 @@ def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, 
         Positions of secondary nodes (possibly only interface or candidates).
     nodes_primary : np.ndarray
         Node indices of primary (possibly only interface or candidates).
-    nodes_primary : np.ndarray
+    nodes_secondary : np.ndarray
         Node indices of secondary (possibly only interface or candidates). 
     rbf : function, default is wendland
         The radial basis function being used.
+    C : float in (c, 1), default is 0.5
+        [1], Page 51, Section 2.3, Equation 3
+        (The empirical default value is given at the bottom right on same page)
 
     Reference
     ---------
@@ -261,26 +256,37 @@ def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, 
     """
 
     while True:
+
         # Determine the radial basis function radius parameters and to how
         # many opposite radial basis function supports each node belongs
-        rbf_radius_parameters_primary, n_supports_in_secondary = compute_rbf_radius_parameters(positions_primary, positions_secondary, rbf=rbf)
-        rbf_radius_parameters_secondary, n_supports_in_primary = compute_rbf_radius_parameters(positions_secondary, positions_primary, rbf=rbf)
-        
+        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, positions_secondary, rbf=rbf)
+        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, positions_primary, rbf=rbf)
+
+        # Determine isolated nodes (i.e. nodes outside support of all opposite rbf)
+        distance_matrix_MN = sp.spatial.distance.cdist(positions_primary, positions_secondary)
+        unisolated_nodes_primary = np.min(distance_matrix_MN / rbf_radius_parameters_secondary, axis=1) < C
+        unisolated_nodes_secondary = np.min(distance_matrix_MN.T / rbf_radius_parameters_primary, axis=1) < C
+
         # Update interface nodes by removing isolated nodes
-        nodes_primary = nodes_primary[n_supports_in_secondary > 0]
-        nodes_secondary = nodes_secondary[n_supports_in_primary > 0]
-        
+        nodes_primary = nodes_primary[unisolated_nodes_primary]
+        nodes_secondary = nodes_secondary[unisolated_nodes_secondary]
+
         # Update interface positions by removing isolated nodes
-        positions_primary = positions_primary[n_supports_in_secondary > 0]
-        positions_secondary = positions_secondary[n_supports_in_primary > 0]
+        positions_primary = positions_primary[unisolated_nodes_primary]
+        positions_secondary = positions_secondary[unisolated_nodes_secondary]
 
         # Stop algorithm if for all secondary and primary interface nodes
         # [1], Page 51, Section 2.3, Equation 3 is satisfied
-        if np.all(n_supports_in_secondary > 0) and np.all(n_supports_in_primary > 0):
+        if not unisolated_nodes_primary.all() or not unisolated_nodes_secondary.all():
             break
+        
+        # If all nodes of one interface are isolated, raise an error
+        if not unisolated_nodes_primary.any() or not unisolated_nodes_secondary.any():
+            raise RuntimeError("No contact nodes were detected.")
 
-    # Verify conditions [1], Page 51, Section 2.3, (2), (3), and (4)
-    #_check_rbf_radius_parameters(positions_primary, positions_secondary, rbf_radius_parameters_primary, c, C)
+    # Remove radius parameters of nodes not belonging to interface
+    rbf_radius_parameters_primary = rbf_radius_parameters_primary[unisolated_nodes_primary]
+    rbf_radius_parameters_secondary = rbf_radius_parameters_secondary[unisolated_nodes_secondary]
 
     return rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary
 
@@ -308,8 +314,8 @@ def construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf):
     interpolation_matrix = np.linalg.solve(rbf_matrix_MM.T, rbf_matrix_NM.T).T
 
     # Compute the diagonal rescaling factors (diagonal entries of $D_{NN}$)
-    rescaling_factors = np.sum(interpolation_matrix, axis=1)[:, np.newaxis]
-    return sp.sparse.csr_matrix(interpolation_matrix / rescaling_factors)
+    scaling_factors = np.sum(interpolation_matrix, axis=1)[:, np.newaxis]
+    return sp.sparse.csr_matrix(interpolation_matrix / scaling_factors)
 
 class ContactMechanicsInternodes(object):
 
@@ -351,7 +357,7 @@ class ContactMechanicsInternodes(object):
         self.rbf_radius_parameters_secondary = None
         
         # Objects for use in the solution process
-        self.rescaling_factor = 30e+9  # TODO: Tunable, Young's modulus
+        self.scaling_factor = 30e+9  # TODO: Tunable, Young's modulus
         self.K = None  # Stiffness matrix
 
         self.R12 = None  # Interpolation matrix from secondary to primary
@@ -462,7 +468,7 @@ class ContactMechanicsInternodes(object):
         [1], Page 54, Section 4, Equation 13
         """
         # Rescale stiffness matrix restricted to free dofs by Young's modulus
-        K_free = self.K[np.ix_(self.dofs_free, self.dofs_free)] / self.rescaling_factor
+        K_free = self.K[np.ix_(self.dofs_free, self.dofs_free)] / self.scaling_factor
         self.internodes_matrix = sp.sparse.vstack([
             sp.sparse.hstack([K_free, self.B]),
             sp.sparse.hstack([self.B_tilde, sp.sparse.csr_matrix(
@@ -470,82 +476,82 @@ class ContactMechanicsInternodes(object):
             )])
         ])
 
-    def assemble_force_term(self, f_free, displacements):
+    def assemble_force_term(self):
         """Assemble the force term.
-        
-        Parameters
-        ----------
-        f_free : np.ndarray
-            Force applied to free DOFs.
-        displacements : np.ndarray
-            Displacements of the free DOFs.
 
         Reference
         ---------
         [1], Page 54, Section 4, Equation 13
         """
         # Compute displacements for Dirichlet boundary condition offset
-        dirichlet_offset = self.K[np.ix_(self.dofs_free, self.dofs_blocked)] * displacements[self.dofs_blocked]
+        dirichlet_offset = self.K[np.ix_(self.dofs_free, self.dofs_blocked)] * self.model.getDisplacement().ravel()[self.dofs_blocked]
         
         # First component $f$ of force term is a adjusted by offset and rescaled
-        virtual_force = (f_free - dirichlet_offset) / self.rescaling_factor
+        virtual_force = (self.model.getExternalForce().ravel()[self.dofs_free] - dirichlet_offset) / self.scaling_factor
 
         # Nodal gaps $d$ between interpolated and true positions of primary nodes
         nodal_gaps = self.R12 * self.positions_interface_secondary - self.positions_interface_primary
     
         self.force_term = np.concatenate([virtual_force, nodal_gaps.ravel()])
 
-    def solve_direct(self, displacements):
+    def assemble_full_model(self):
+        self.assemble_interpolation_matrices()
+        self.assemble_stiffness_matrix()
+        self.assemble_interface_mass_matrices()
+        self.assemble_B_matrices()
+        self.assemble_internodes_matrix()
+        self.assemble_force_term()
+
+    def solve_direct(self):
         """Solve the INTERNODES system of equations.
         
-        Parameters
-        ----------
-        displacements : np.ndarray
-            Displacements of the free DOFs before the solve step 
-
         Returns
         -------
-        positions_new : np.ndarray
-            Positions after the solve step 
         displacements : np.ndarray
-            Displacements $u$ of the free DOFs after the solve step 
+            Displacements $u$ of the free DOFs after the solve step.
         lambdas : np.ndarray
-            Lagrange multipliers $\lambda$ after the solve step
+            Lagrange multipliers $\lambda$ after the solve step.
         
         Reference
         ---------
         [1], Page 54, Section 4, Equation 13
         """
+        # Solve the internodes system
         x = sp.sparse.linalg.spsolve(self.internodes_matrix, self.force_term)
 
-        # FIll in the computed displacements at the free dofs
-        displacements[self.dofs_free] = x[:len(self.dofs_free)]
-        positions_new = self.mesh.getNodes() + displacements.reshape((-1, self.dim))
+        # Fill in the computed displacements at the free dofs
+        n_dofs_free = len(self.dofs_free)
+        displacements = self.model.getDisplacement().ravel()
+        displacements[self.dofs_free] = x[:n_dofs_free]
+        displacements = displacements.reshape((-1, self.dim))
 
-        # Reshape and revert the rescaling of the Lagrange multipliers $\lambda$
-        lambdas = x[len(self.dofs_free):].reshape((-1, self.dim)) * self.rescaling_factor
+        # Reshape and revert the scaling of the Lagrange multipliers $\lambda$
+        lambdas = x[n_dofs_free:].reshape((-1, self.dim)) * self.scaling_factor
 
-        return positions_new, displacements, lambdas
+        return displacements, lambdas
 
-    def update_interface(self, positions_new, lambdas):
+    def update_interface(self, displacements, lambdas):
         """Update the interfaces according to penetrations and tension
         
         Parameters
         ----------
-        positions_new : np.ndarray
-            New positions of nodes after solving the INTERNODES system.
+        displacements : np.ndarray
+            Displacements $u$ of the free DOFs after the solve step.
         lambdas : np.ndarray
-            Lagrange multipliers obtained from solving the INTERNODES system.
+            Lagrange multipliers $\lambda$ after the solve step.
 
         Returns
         -------
         converged : bool
-            If all Lagrange multipliers negative and no penetration is detected
+            If all Lagrange multipliers negative and no penetration is detected.
 
         Reference
         ---------
         [2], Page 23, Algorithm 2, Lines 5-16
         """
+        # Get new positions
+        positions_new = self.mesh.getNodes() + displacements
+
         # Get connectivities (triangle/segment indices) between candidate nodes
         connectivity_candidate_primary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_primary)
         connectivity_candidate_secondary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_secondary)
