@@ -277,7 +277,7 @@ def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, 
 
         # Stop algorithm if for all secondary and primary interface nodes
         # [1], Page 51, Section 2.3, Equation 3 is satisfied
-        if not unisolated_nodes_primary.all() or not unisolated_nodes_secondary.all():
+        if unisolated_nodes_primary.all() or unisolated_nodes_secondary.all():
             break
         
         # If all nodes of one interface are isolated, raise an error
