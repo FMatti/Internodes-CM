@@ -138,24 +138,7 @@ def wendland_rbf(distances, radiuses):
     """
     return wendland(distances / radiuses)
 
-def _check_rbf_radius_parameters(positions, positions_ref, rbf_radius_parameters, c, C):
-    distance_matrix_MM = sp.spatial.distance.cdist(positions, positions)
-    distance_matrix_NM = sp.spatial.distance.cdist(positions_ref, positions)
-
-    # Assert condition: [1], Page 51, Section 2.3, Equation 2
-    np.fill_diagonal(distance_matrix_MM, np.inf)
-    is_not_close_MM = distance_matrix_MM >= (c - 1e-10)*rbf_radius_parameters
-    assert is_not_close_MM.all()
-
-    # Assert condition: [1], Page 51, Section 2.3, Equation 3
-    is_close_NM = distance_matrix_NM <= C*rbf_radius_parameters
-    assert is_close_NM.any(axis=1).all()
-
-    # Assert condition: [1], Page 51, Section 2.3, Equation 4
-    n_supports_interpolation = np.sum(distance_matrix_MM < rbf_radius_parameters, axis=0)
-    assert np.max(n_supports_interpolation) < 1 / wendland(c)
-
-def compute_rbf_radius_parameters(positions, positions_ref, rbf=wendland, c=0.5):
+def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
     """Iteratively compute radius parameters for radial basis functions until
     invertibility conditions are satisfied (increase 'c' in every iteration).
 
@@ -163,8 +146,6 @@ def compute_rbf_radius_parameters(positions, positions_ref, rbf=wendland, c=0.5)
     ----------
     positions : np.ndarray
         Positions of interpolation nodes.
-    positions_ref : np.ndarray
-        Positions of reference/evaluation nodes.
     c : float in (0, 1), default is 0.5
         [1], Page 51, Section 2.3, Equation 2
         (The empirical default value is given at the right on same page)
@@ -180,41 +161,20 @@ def compute_rbf_radius_parameters(positions, positions_ref, rbf=wendland, c=0.5)
     ---------
     [1], Page 51, Section 2.3
     """
-    # Compute distance matrices among nodes and from nodes to reference nodes:
+    # Compute distance matrices among nodes
     # distance_matrix(X, Y)[i, j] = ||x_i - y_j||
     distance_matrix_MM = sp.spatial.distance.cdist(positions, positions)
-    #distance_matrix_NM = sp.spatial.distance.cdist(positions_ref, positions)
 
     # Minimum distance of each node from closest distinct interpolation node
     np.fill_diagonal(distance_matrix_MM, np.inf)
     min_distance_MM = np.min(distance_matrix_MM, axis=0)
 
-    # Extremely heuristic: Estimate for the minimum distance of the nodes
-    # from the reference nodes (min_distance_MM/2 is supposed to be
-    # representative of the distance an orthogonal projection of the
-    # reference nodes onto the interface is away from the closest node)
-    #d0 = 0.05
-    #min_distance_NM = (d0**2 + (min_distance_MM/2)**2)**0.5
-    # Minimum distance of each reference point from interpolation node
-    #min_distance_NM = np.min(distance_matrix_NM, axis=0)
-    # Take maximum of the two minimum distances from the closest nodes
-    #rbf_radius_parameters = np.maximum(min_distance_MM, min_distance_NM)
-
-    #rbf_radius_parameters = min_distance_MM / c
-    #n_supports_reference = np.sum(distance_matrix_NM < C*rbf_radius_parameters, axis=0)
-
     # Iteratively increase parameter 'c' if necessary
     while True:
 
-        rbf_radius_parameters = min_distance_MM / c
-
-        # Enforce condition [1], Page 51, Section 2.3, Equation 2
+        # Define radius parameters for [1], Page 51, Section 2.3, Equation 2
         # (Also mentioned in [1], Page 51, Section 2.3, right center)
-        #rbf_radius_parameters = np.minimum(candidate_radiuses, min_distance_MM / c)
-
-        # Number of radial basis functions in whose support reference nodes are
-        # belong (support is shrunk by C: [1], Page 51, Section 2.3, Equation 3)
-        # n_supports_reference = np.sum(distance_matrix_NM < C*rbf_radius_parameters, axis=0)
+        rbf_radius_parameters = min_distance_MM / c
 
         # Number radial basis functions in whose support interpolation nodes are
         n_supports_interpolation = np.sum(distance_matrix_MM < rbf_radius_parameters, axis=0)
@@ -259,8 +219,8 @@ def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, 
 
         # Determine the radial basis function radius parameters and to how
         # many opposite radial basis function supports each node belongs
-        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, positions_secondary, rbf=rbf)
-        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, positions_primary, rbf=rbf)
+        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, rbf=rbf)
+        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, rbf=rbf)
 
         # Determine isolated nodes (i.e. nodes outside support of all opposite rbf)
         distance_matrix_MN = sp.spatial.distance.cdist(positions_primary, positions_secondary)
@@ -615,9 +575,6 @@ class ContactMechanicsInternodes(object):
         normals_avg : np.ndarray
         """
 
-        # Determine boundary nodes that aren't interface elements
-        #nodes_candidate_noninterface = np.setdiff1d(all_triangles_candidate, nodes_candidate)
-
         # Compute tangents corresponding to the elements at new positions
         if self.dim == 2:
             tangent1 = positions_new[connectivity[:, 1]] - positions_new[connectivity[:, 0]]
@@ -635,25 +592,6 @@ class ContactMechanicsInternodes(object):
 
             # Compute average surface normal for each candidate node
             normals_avg[j] = np.sum(normals[id] / np.linalg.norm(normals[id], axis=1)[:, np.newaxis], axis=0)
-
-            """
-            # This below steps are unnecessary if mesh oriented correctly!
-            step_size=1e-3
-
-            # Compute average normal on interface boundary
-            normal_avg = np.sum(normals[id] / np.linalg.norm(normals[id], axis=1)[:, np.newaxis], axis=0)
-
-            # Extend positions by +/- a step size in the normal direction
-            positions_plus = positions_new[node] + step_size*normal_avg
-            positions_minus = positions_new[node] - step_size*normal_avg
-
-            # Find minimum distance of new positions of non-interface nodes to WHAT?!?!
-            min_plus = sp.spatial.distance.cdist(positions_new[nodes_candidate_noninterface], positions_plus.reshape((-1, self.dim))).min()
-            min_minus = sp.spatial.distance.cdist(positions_new[nodes_candidate_noninterface], positions_minus.reshape((-1, self.dim))).min()
-
-            # Change sign of the average normal vector
-            normals_avg[j] = normal_avg * (1 if min_plus > min_minus else -1)
-            """
 
         normals_avg /= np.linalg.norm(normals_avg, axis=1)[:, np.newaxis]
 

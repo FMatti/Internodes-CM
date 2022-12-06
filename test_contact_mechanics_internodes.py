@@ -45,10 +45,10 @@ def test_compute_rbf_radius_parameters_regular():
         positions_primary = _get_uniform_interface_grid(dim, g_zeros, n_grid=10)
         positions_secondary = _get_uniform_interface_grid(dim, g_parabolic, n_grid=10)
 
-        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, positions_secondary)
+        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary)
         _check_rbf_radius_conditions(positions_primary, rbf_radius_parameters_primary)
 
-        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, positions_primary)
+        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary)
         _check_rbf_radius_conditions(positions_secondary, rbf_radius_parameters_secondary)
 
 def test_find_interface_nodes_regular():
@@ -75,10 +75,10 @@ def test_compute_rbf_radius_parameters_random():
         positions_primary = _get_random_interface_grid(dim, g_zeros, n_grid=10)
         positions_secondary = _get_random_interface_grid(dim, g_parabolic, n_grid=10)
 
-        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, positions_secondary)
+        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary)
         _check_rbf_radius_conditions(positions_primary, rbf_radius_parameters_primary)
 
-        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, positions_primary)
+        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary)
         _check_rbf_radius_conditions(positions_secondary, rbf_radius_parameters_secondary)
 
 def test_find_interface_nodes_random():
