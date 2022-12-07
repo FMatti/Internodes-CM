@@ -171,11 +171,7 @@ def test_contact3d_problem():
     model.applyBC(aka.FixedValue(0., aka._y), 'primary_fixed')
     model.applyBC(aka.FixedValue(0., aka._z), 'primary_fixed')
     model.applyBC(aka.FixedValue(0., aka._x), 'secondary_fixed')
-    model.applyBC(aka.FixedValue(-0.1, aka._y), 'secondary_fixed')
     model.applyBC(aka.FixedValue(0., aka._z), 'secondary_fixed')
-
-    # Set initial conditions
-    internodes_model = ContactMechanicsInternodes(spatial_dimension, mesh, model, 'primary_candidates', 'secondary_candidates')
 
     # Run internodes algorithm
     d0 = 0.05
@@ -184,7 +180,7 @@ def test_contact3d_problem():
     E = model.getMaterial(0).getReal("E")
     nu = model.getMaterial(0).getReal("nu")
 
-    d_list = np.linspace(0.05, 0.1, 2)
+    d_list = np.linspace(0.05, 0.35, 5)
     a_list = np.empty_like(d_list)
     u_list = np.empty_like(d_list)
 
@@ -192,7 +188,13 @@ def test_contact3d_problem():
 
         model.applyBC(aka.FixedValue(-d+d0, aka._y), 'secondary_fixed')
 
-        internodes_model = ContactMechanicsInternodes(spatial_dimension, mesh, model, 'primary_candidates', 'secondary_candidates')
+        # Get positions of all nodes, surface connectivity and candidate nodes
+        positions = mesh.getNodes()
+        surface_connectivity = mesh.getConnectivity(aka._triangle_3)
+        nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
+        nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
+
+        internodes_model = ContactMechanicsInternodes(spatial_dimension, model, positions, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary)
 
         max_iter = 10
         for i in range(max_iter):
@@ -213,13 +215,13 @@ def test_contact3d_problem():
 
         assert i+1 < max_iter
 
-        positions = internodes_model.mesh.getNodes() + displacements
+        positions = internodes_model.nodal_positions + displacements
         positions_interface_secondary = positions[internodes_model.nodes_interface_secondary]
 
         a_list[j] = np.max(sp.spatial.distance.cdist(positions_interface_secondary, positions_interface_secondary))/2
         u_list[j] = np.min(positions_interface_secondary[:, 1])
 
-    np.testing.assert_allclose(get_theoretical_normal_displacement(R, d_list, E, nu), u_list, atol=1e-2)
+    np.testing.assert_allclose(get_theoretical_normal_displacement(R, d_list, E, nu), u_list, atol=5e-3)
 
 def test_contact2d_problem():
     """

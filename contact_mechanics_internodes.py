@@ -280,37 +280,33 @@ def construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf):
 
 class ContactMechanicsInternodes(object):
 
-    def __init__(self, dim, mesh, model, name_candidate_interface_primary, name_candidate_interface_secondary, rbf=wendland_rbf, blocked_nodes_name=None):
+    def __init__(self, dim, model, nodal_positions, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary, rbf=wendland_rbf):
         self.dim = dim
-        self.mesh = mesh
         self.model = model
-    
-        # Candidate nodes for contact interface
-        self.nodes_candidate_primary = mesh.getElementGroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
-        self.nodes_candidate_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
-        
+
+        # Nodal positions of all nodes included in mesh
+        self.nodal_positions = nodal_positions.copy()
+        self.surface_connectivity = surface_connectivity.copy()
+
+        # Candidate nodes and their connectivity (2D: segments, 3D: triangles)
+        self.nodes_candidate_primary = nodes_candidate_primary.copy()
+        self.nodes_candidate_secondary = nodes_candidate_secondary.copy() 
+        self.connectivity_candidate_primary = remove_rows_without_all_items(self.surface_connectivity, self.nodes_candidate_primary)
+        self.connectivity_candidate_secondary = remove_rows_without_all_items(self.surface_connectivity, self.nodes_candidate_secondary)
+
         # Nodes, positions, and corresponding dofs of primary/secondary interface
-        self.nodes_interface_primary = mesh.getElementGroup(name_candidate_interface_primary).getNodeGroup().getNodes().ravel()
-        self.nodes_interface_secondary = mesh.getElementGroup(name_candidate_interface_secondary).getNodeGroup().getNodes().ravel()
-        self.positions_interface_primary = mesh.getNodes()[self.nodes_interface_primary]
-        self.positions_interface_secondary = mesh.getNodes()[self.nodes_interface_secondary]
+        self.nodes_interface_primary = nodes_candidate_primary.copy()
+        self.nodes_interface_secondary = nodes_candidate_secondary.copy()
+        self.positions_interface_primary = self.nodal_positions[self.nodes_interface_primary]
+        self.positions_interface_secondary = self.nodal_positions[self.nodes_interface_secondary]
         self.dofs_interface_primary = nodes_to_dofs(self.nodes_interface_primary, dim=self.dim)
         self.dofs_interface_secondary = nodes_to_dofs(self.nodes_interface_secondary, dim=self.dim)
 
         # All dofs, blocked dofs, and free dofs
-        self.dofs = np.arange(mesh.getNbNodes()*self.dim)
+        self.dofs = np.arange(len(self.nodal_positions)*self.dim)
         blocked_dofs = model.getBlockedDOFs()
-        if blocked_nodes_name:
-            blocked_dofs[mesh.getElementGroup(blocked_nodes_name).getNodeGroup().getNodes()] = True
         self.dofs_blocked = self.dofs[blocked_dofs.ravel()]
         self.dofs_free = self.dofs[~blocked_dofs.ravel()]
-
-        # Connectivity of the model (line segments and triangular elements)
-        triangles = mesh.getConnectivity(aka._triangle_3)
-        if self.dim == 2:
-            self.connectivity = triangles[:, np.array([0, 1, 0, 2, 1, 2])].reshape(-1, 2)
-        elif self.dim == 3:
-            self.connectivity = triangles
 
         # Radial basis function and the corresponding radius parameters
         self.rbf = rbf
@@ -318,7 +314,7 @@ class ContactMechanicsInternodes(object):
         self.rbf_radius_parameters_secondary = None
         
         # Objects for use in the solution process
-        self.scaling_factor = 30e+9  # TODO: Tunable, Young's modulus
+        self.scaling_factor = 30e+9  # Young's modulus
         self.K = None  # Stiffness matrix
 
         self.R12 = None  # Interpolation matrix from secondary to primary
@@ -511,15 +507,11 @@ class ContactMechanicsInternodes(object):
         [2], Page 23, Algorithm 2, Lines 5-16
         """
         # Get new positions
-        positions_new = self.mesh.getNodes() + displacements
-
-        # Get connectivities (triangle/segment indices) between candidate nodes
-        connectivity_candidate_primary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_primary)
-        connectivity_candidate_secondary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_secondary)
+        positions_new = self.nodal_positions + displacements
 
         # Compute the normals
-        normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, connectivity_candidate_primary)
-        normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, connectivity_candidate_secondary)
+        normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, self.connectivity_candidate_primary)
+        normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, self.connectivity_candidate_secondary)
         normals_interface_primary = normals_candidate_primary[np.in1d(self.nodes_candidate_primary, self.nodes_interface_primary)]
         normals_interface_secondary = normals_candidate_secondary[np.in1d(self.nodes_candidate_secondary, self.nodes_interface_secondary)]
 
@@ -552,8 +544,8 @@ class ContactMechanicsInternodes(object):
             self.nodes_interface_secondary = np.setdiff1d(self.nodes_interface_secondary, nodes_to_dump_secondary)
 
         # Update interface positions according to new set of interface nodes
-        self.positions_interface_primary = self.mesh.getNodes()[self.nodes_interface_primary]
-        self.positions_interface_secondary = self.mesh.getNodes()[self.nodes_interface_secondary]
+        self.positions_interface_primary = self.nodal_positions[self.nodes_interface_primary]
+        self.positions_interface_secondary = self.nodal_positions[self.nodes_interface_secondary]
 
         return False
 
