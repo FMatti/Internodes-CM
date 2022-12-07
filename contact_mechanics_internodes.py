@@ -191,64 +191,65 @@ def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
 
     return rbf_radius_parameters
 
-def find_interface_nodes(positions_primary, positions_secondary, nodes_primary, nodes_secondary, rbf=wendland, C=0.95):
+def find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95):
     """Find contact/interface nodes while trying to satisfy the constraints.
 
     Parameters
     ----------
     positions_primary: np.ndarray
-        Positions of primary nodes (possibly only interface or candidates).
+        Positions of candidate primary nodes.
     positions_secondary: np.ndarray
-        Positions of secondary nodes (possibly only interface or candidates).
-    nodes_primary : np.ndarray
-        Node indices of primary (possibly only interface or candidates).
-    nodes_secondary : np.ndarray
-        Node indices of secondary (possibly only interface or candidates). 
+        Positions of candidate secondary nodes.
     rbf : function, default is wendland
         The radial basis function being used.
     C : float in (c, 1), default is 0.5
         [1], Page 51, Section 2.3, Equation 3
         (The empirical default value is given at the bottom right on same page)
 
+    Returns
+    -------
+    interface_primary_mask : np.ndarray
+        Boolean array for nodes in primary that belong to the interface.
+    interface_secondary_mask : np.ndarray
+        Boolean array for nodes in secondary that belong to the interface.
+
     Reference
     ---------
     [1], Page 51, Section 2.3, Equation 2 and 3
     """
 
+    interface_primary_mask = np.ones(len(positions_primary), dtype=bool)
+    interface_secondary_mask = np.ones(len(positions_secondary), dtype=bool)
+
     while True:
 
         # Determine the radial basis function radius parameters and to how
         # many opposite radial basis function supports each node belongs
-        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary, rbf=rbf)
-        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary, rbf=rbf)
+        rbf_radius_parameters_primary = compute_rbf_radius_parameters(positions_primary[interface_primary_mask], rbf=rbf)
+        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(positions_secondary[interface_secondary_mask], rbf=rbf)
+
+        distance_matrix_MN = sp.spatial.distance.cdist(positions_primary[interface_primary_mask], positions_secondary[interface_secondary_mask])
 
         # Determine isolated nodes (i.e. nodes outside support of all opposite rbf)
-        distance_matrix_MN = sp.spatial.distance.cdist(positions_primary, positions_secondary)
-        unisolated_nodes_primary = np.min(distance_matrix_MN / rbf_radius_parameters_secondary, axis=1) < C
-        unisolated_nodes_secondary = np.min(distance_matrix_MN.T / rbf_radius_parameters_primary, axis=1) < C
-
-        # Update interface nodes by removing isolated nodes
-        nodes_primary = nodes_primary[unisolated_nodes_primary]
-        nodes_secondary = nodes_secondary[unisolated_nodes_secondary]
-
-        # Update interface positions by removing isolated nodes
-        positions_primary = positions_primary[unisolated_nodes_primary]
-        positions_secondary = positions_secondary[unisolated_nodes_secondary]
+        primary_mask =  np.min(distance_matrix_MN / rbf_radius_parameters_secondary, axis=1) < C
+        secondary_mask = np.min(distance_matrix_MN.T / rbf_radius_parameters_primary, axis=1) < C
+        interface_primary_mask[interface_primary_mask] = primary_mask
+        interface_secondary_mask[interface_secondary_mask] = secondary_mask
 
         # Stop algorithm if for all secondary and primary interface nodes
         # [1], Page 51, Section 2.3, Equation 3 is satisfied
-        if unisolated_nodes_primary.all() or unisolated_nodes_secondary.all():
+        if primary_mask.all() or secondary_mask.all():
             break
         
         # If all nodes of one interface are isolated, raise an error
-        if not unisolated_nodes_primary.any() or not unisolated_nodes_secondary.any():
+        if not interface_primary_mask.any() or not interface_secondary_mask.any():
             raise RuntimeError("No contact nodes were detected.")
 
     # Remove radius parameters of nodes not belonging to interface
-    rbf_radius_parameters_primary = rbf_radius_parameters_primary[unisolated_nodes_primary]
-    rbf_radius_parameters_secondary = rbf_radius_parameters_secondary[unisolated_nodes_secondary]
+    rbf_radius_parameters_primary = rbf_radius_parameters_primary[primary_mask]
+    rbf_radius_parameters_secondary = rbf_radius_parameters_secondary[secondary_mask]
 
-    return rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary
+    return rbf_radius_parameters_primary, rbf_radius_parameters_secondary, interface_primary_mask, interface_secondary_mask
 
 def construct_rbf_matrix(positions, positions_ref, radiuses_ref, rbf):
     """Construct radial basis matrix $\Phi_{NM}$.
@@ -334,25 +335,25 @@ class ContactMechanicsInternodes(object):
 
     def find_interface_nodes(self):
         """Find contact/interface nodes while trying to satisfy the constraints.
-       
+
         Reference
         ---------
         [1], Page 51, Section 2.3, Equation 2, 3, and 4
         """
         # Find the contact nodes and corresponding radial basis parameters
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary, nodes_interface_secondary = find_interface_nodes(self.positions_interface_primary, self.positions_interface_secondary, self.nodes_interface_primary, self.nodes_interface_secondary, rbf=wendland)
-        
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, interface_primary_mask, interface_secondary_mask = find_interface_nodes(self.positions_interface_primary, self.positions_interface_secondary, rbf=wendland)
+
         # Update current radius parameters of radial basis functions
         self.rbf_radius_parameters_primary = rbf_radius_parameters_primary
         self.rbf_radius_parameters_secondary = rbf_radius_parameters_secondary
-        
-        # Update positions with new node indices obtained
-        self.positions_interface_primary = self.positions_interface_primary[np.in1d(self.nodes_interface_primary, nodes_interface_primary)]
-        self.positions_interface_secondary = self.positions_interface_secondary[np.in1d(self.nodes_interface_secondary, nodes_interface_secondary)]
 
-        # Update node indices new node indices obtained
-        self.nodes_interface_primary = nodes_interface_primary
-        self.nodes_interface_secondary = nodes_interface_secondary
+        # Update interface node sets
+        self.nodes_interface_primary = self.nodes_interface_primary[interface_primary_mask]
+        self.nodes_interface_secondary = self.nodes_interface_secondary[interface_secondary_mask]
+
+        # Update positions of interface node sets
+        self.positions_interface_primary = self.positions_interface_primary[interface_primary_mask]
+        self.positions_interface_secondary = self.positions_interface_secondary[interface_secondary_mask]
 
         # Update degrees of freedom with new node indices obtained
         self.dofs_interface_primary = nodes_to_dofs(self.nodes_interface_primary, dim=self.dim)
@@ -464,14 +465,14 @@ class ContactMechanicsInternodes(object):
 
     def solve_direct(self):
         """Solve the INTERNODES system of equations.
-        
+
         Returns
         -------
         displacements : np.ndarray
             Displacements $u$ of the free DOFs after the solve step.
         lambdas : np.ndarray
             Lagrange multipliers $\lambda$ after the solve step.
-        
+
         Reference
         ---------
         [1], Page 54, Section 4, Equation 13
@@ -492,7 +493,7 @@ class ContactMechanicsInternodes(object):
 
     def update_interface(self, displacements, lambdas):
         """Update the interfaces according to penetrations and tension
-        
+
         Parameters
         ----------
         displacements : np.ndarray
@@ -515,7 +516,7 @@ class ContactMechanicsInternodes(object):
         # Get connectivities (triangle/segment indices) between candidate nodes
         connectivity_candidate_primary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_primary)
         connectivity_candidate_secondary = remove_rows_without_all_items(self.connectivity, self.nodes_candidate_secondary)
-        
+
         # Compute the normals
         normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, connectivity_candidate_primary)
         normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, connectivity_candidate_secondary)
@@ -569,7 +570,7 @@ class ContactMechanicsInternodes(object):
             Connectivity of the line segments in the mesh.
         triangles : np.ndarray
             Connectivity of the triangular elements in the mesh.
-    
+
         Returns
         -------
         normals_avg : np.ndarray
@@ -600,7 +601,7 @@ class ContactMechanicsInternodes(object):
     def detect_penetration_nodes(self, positions_new, normals_candidates_primary, normals_candidates_secondary, tolerance=0.9, mesh_size=0.1):
         """Detect the nodes on secondary and primary interface that penetrate.
         TODO: Require reference and make mesh size configurable!!
-
+        
         Parameters
         ----------
         positions_new : np.ndarray
@@ -627,19 +628,19 @@ class ContactMechanicsInternodes(object):
         positions_candidate_secondary = positions_new[self.nodes_candidate_secondary]
 
         # Find contact nodes with contact detection algorithm
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary, nodes_interface_secondary = find_interface_nodes(positions_candidate_primary, positions_candidate_secondary, self.nodes_candidate_primary, self.nodes_candidate_secondary)
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary_mask, nodes_interface_secondary_mask = find_interface_nodes(positions_candidate_primary, positions_candidate_secondary)
 
         # Update positions of primary and secondary nodes along interface
-        positions_interface_primary = positions_new[nodes_interface_primary]
-        positions_interface_secondary = positions_new[nodes_interface_secondary]
+        positions_interface_primary = positions_candidate_primary[nodes_interface_primary_mask]
+        positions_interface_secondary = positions_candidate_secondary[nodes_interface_secondary_mask]
 
         # Update normals of primary and secondary nodes along interface
-        normals_interface_primary = normals_candidates_primary[np.in1d(self.nodes_candidate_primary, nodes_interface_primary)]
-        normals_interface_secondary = normals_candidates_secondary[np.in1d(self.nodes_candidate_secondary, nodes_interface_secondary)]
+        normals_interface_primary = normals_candidates_primary[nodes_interface_primary_mask]
+        normals_interface_secondary = normals_candidates_secondary[nodes_interface_secondary_mask]
 
         R12 = construct_interpolation_matrix(positions_interface_primary, positions_interface_secondary, rbf_radius_parameters_secondary, self.rbf)
         R21 = construct_interpolation_matrix(positions_interface_secondary, positions_interface_primary, rbf_radius_parameters_primary, self.rbf)
-  
+
         # Determine the size of the nodal gaps on interface
         nodal_gaps_primary = R12 * positions_interface_secondary - positions_interface_primary
         nodal_gaps_secondary = R21 * positions_interface_primary - positions_interface_secondary
@@ -650,7 +651,7 @@ class ContactMechanicsInternodes(object):
         penetrates_primary = np.sum(nodal_gaps_secondary * normals_interface_secondary, axis=1) < threshold
 
         # Add the nodes where penetration is observed to the interface
-        nodes_penetration_primary = nodes_interface_primary[penetrates_secondary]
-        nodes_penetration_secondary = nodes_interface_secondary[penetrates_primary]
+        nodes_penetration_primary = self.nodes_candidate_primary[nodes_interface_primary_mask][penetrates_secondary]
+        nodes_penetration_secondary = self.nodes_candidate_secondary[nodes_interface_secondary_mask][penetrates_primary]
 
         return nodes_penetration_primary, nodes_penetration_secondary
