@@ -318,15 +318,54 @@ def compute_normals(nodal_positions, nodes, surface_connectivity, dim):
 
     return node_normals
 
-def compute_nodal_gaps(positions, positions_ref, radiuses_ref, rbf=wendland_rbf):
-    interpolation_matrix = construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf)
-    nodal_gaps = interpolation_matrix * positions_ref - positions
-    return nodal_gaps
-
-def find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, rbf=wendland_rbf, tolerance=0.9, mesh_size=0.1):
+def find_penetration_nodes(positions_primary, positions_secondary, normals_primary, normals_secondary, n=5):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
-    
+
+    Parameters
+    ----------
+    positions_new : np.ndarray
+        New positions of nodes after solving the INTERNODES system.
+    normals_interface_primary : np.ndarray
+        Normal vectors of primary interface.
+    normals_interface_secondary : np.ndarray
+        Normal vectors of secondary interface.
+    tolerance : float in (0, 1), default is 0.9
+        Tolerance for what counts as penetration or not.
+    mesh_size : float, default is 0.05 (TODO: No default but adaptive)
+        Representative size of mesh to determine when penetration happens.
+
+    Returns
+    -------
+    nodes_penetration_primary : np.ndarray
+        Nodes of primary interface where penetration is observed.
+    nodes_penetration_secondary : np.ndarray
+        Nodes of secondary interface where penetration is observed.
+    """
+
+    distance_matrix = sp.spatial.distance.cdist(positions_primary, positions_secondary)
+
+    closest_secondary_to_primary_nodes = np.argsort(distance_matrix, axis=1)[:, :n]
+    closest_primary_to_secondary_nodes = np.argsort(distance_matrix.T, axis=1)[:, :n]
+
+    closest_secondary_to_primary_positions = positions_secondary[closest_secondary_to_primary_nodes]
+    closest_primary_to_secondary_positions = positions_primary[closest_primary_to_secondary_nodes]
+
+    gaps_primary_to_secondary = closest_secondary_to_primary_positions - positions_primary[:, np.newaxis, :]
+    gaps_secondary_to_primary = closest_primary_to_secondary_positions - positions_secondary[:, np.newaxis, :]
+
+    inner_primary = np.sum(gaps_primary_to_secondary * normals_secondary[closest_secondary_to_primary_nodes], axis=2)
+    inner_secondary = np.sum(gaps_secondary_to_primary * normals_primary[closest_primary_to_secondary_nodes], axis=2)
+
+    penetration_node_primary = ~np.any(inner_primary < 1e-2, axis=1)
+    penetration_node_secondary = ~np.any(inner_secondary < 1e-2, axis=1)
+
+    return penetration_node_primary, penetration_node_secondary
+
+def old_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, rbf=wendland_rbf, tolerance=0.9, mesh_size=0.1):
+    """Find the nodes on secondary and primary interface that penetrate.
+    TODO: Require reference and make mesh size configurable!!
+
     Parameters
     ----------
     positions_new : np.ndarray
@@ -374,11 +413,18 @@ def find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candi
     penetrates_secondary = np.sum(nodal_gaps_primary * normals_interface_primary, axis=1) < threshold
     penetrates_primary = np.sum(nodal_gaps_secondary * normals_interface_secondary, axis=1) < threshold
 
+    nodes_penetration_primary_new, nodes_penetration_secondary_new = new_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, n=3)
+
+    #print(nodes_penetration_primary_new)
+    #print(nodes_penetration_secondary_new)
+    non_interface_penetrations_primary = nodes_penetration_primary_new#np.setdiff1d(nodes_penetration_primary_new, nodes_candidate_primary[nodes_interface_primary_mask])
+    non_interface_penetrations_secondary = nodes_penetration_secondary_new#np.setdiff1d(nodes_penetration_secondary_new, nodes_candidate_secondary[nodes_interface_secondary_mask])
+
     # Add the nodes where penetration is observed to the interface
     nodes_penetration_primary = nodes_candidate_primary[nodes_interface_primary_mask][penetrates_secondary]
     nodes_penetration_secondary = nodes_candidate_secondary[nodes_interface_secondary_mask][penetrates_primary]
 
-    return nodes_penetration_primary, nodes_penetration_secondary
+    return np.union1d(nodes_penetration_primary, non_interface_penetrations_primary), np.union1d(nodes_penetration_secondary, non_interface_penetrations_secondary)
 
 class ContactMechanicsInternodes(object):
 
@@ -628,22 +674,28 @@ class ContactMechanicsInternodes(object):
         nodes_to_dump_secondary = self.nodes_interface_secondary[positive_lambda_proj_secondary]
 
         # Add new nodes to primary and secondary
-        nodes_to_add_primary, nodes_to_add_secondary = find_penetration_nodes(positions_new, self.nodes_candidate_primary, self.nodes_candidate_secondary, normals_candidate_primary, normals_candidate_secondary, rbf=self.rbf)
-        self.nodes_interface_primary = np.union1d(self.nodes_interface_primary, nodes_to_add_primary)
-        self.nodes_interface_secondary = np.union1d(self.nodes_interface_secondary, nodes_to_add_secondary)
-
+        positions_candidate_primary = positions_new[self.nodes_candidate_primary]
+        positions_candidate_secondary = positions_new[self.nodes_candidate_secondary]
+        nodes_penetration_primary, nodes_penetration_secondary = find_penetration_nodes(positions_candidate_primary, positions_candidate_secondary, normals_candidate_primary, normals_candidate_secondary)
+        nodes_to_add_primary = self.nodes_candidate_primary[nodes_penetration_primary]
+        nodes_to_add_secondary = self.nodes_candidate_secondary[nodes_penetration_secondary]
+        print(nodes_to_add_primary)
+        print(nodes_to_add_secondary)
         # If projected Lagrange multipliers are all negative
         if not (positive_lambda_proj_primary.any() or positive_lambda_proj_secondary.any()):
 
             # Convergence if all penetration nodes are already in interface
-            if (np.all(np.in1d(nodes_to_add_primary, self.nodes_interface_primary))
-             or np.all(np.in1d(nodes_to_add_secondary, self.nodes_interface_secondary))):
+            if not (nodes_penetration_primary.any() or nodes_penetration_secondary.any()):
                 return True
 
         else:
             # Dump nodes from primary and secondary
             self.nodes_interface_primary = np.setdiff1d(self.nodes_interface_primary, nodes_to_dump_primary)
             self.nodes_interface_secondary = np.setdiff1d(self.nodes_interface_secondary, nodes_to_dump_secondary)
+
+        # Add penetration nodes
+        self.nodes_interface_primary = np.union1d(self.nodes_interface_primary, nodes_to_add_primary)
+        self.nodes_interface_secondary = np.union1d(self.nodes_interface_secondary, nodes_to_add_secondary)
 
         # Update interface positions according to new set of interface nodes
         self.positions_interface_primary = self.nodal_positions[self.nodes_interface_primary]

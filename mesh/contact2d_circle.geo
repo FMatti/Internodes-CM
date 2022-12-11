@@ -1,4 +1,4 @@
-l = 0.2; // Target mesh size
+l = 0.1; // Target mesh size
 
 lx = 2; // x-sidelength of cuboid
 ly = 0.5; // y-sidelength of cuboid
@@ -6,8 +6,8 @@ ly = 0.5; // y-sidelength of cuboid
 r = 0.5; // Radius of the circle
 d = 0.05; // Initial penetration overlap of sphere
 
-a = 0.4; // Maximum expected radius of contact area
-n = 20; // Number of mesh refinements for candidates
+a = 0.45; // Maximum expected radius of contact area
+n = 25; // Number of mesh refinements for candidates
 
 
 // ---> PRIMARY
@@ -30,7 +30,7 @@ Line(6) = {6, 1};
 
 Physical Curve("primary_fixed") = {1};
 Physical Curve("primary_bulk") = {2, 3, 5, 6};
-Physical Curve("primary_candidate") = {4};
+Physical Curve("primary_candidates") = {4};
 
 Transfinite Curve{4} = n;
 
@@ -87,7 +87,7 @@ Circle(L4) = {P3, C, P4};
 L5 = newl;
 Line(L5) = {P4, C};
 
-Physical Curve("secondary_candidate") = {L3};
+Physical Curve("secondary_candidates") = {L3};
 Physical Curve("secondary_bulk") = {L2, L4};
 Physical Curve("secondary_fixed") = {L1, L5};
 

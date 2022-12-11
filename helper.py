@@ -17,7 +17,7 @@ def get_theoretical_normal_displacement(R, d, E, nu):
 
 def plot_mesh(positions, triangle_indices, nodes_interface=None, nodes_interpenetrating=None, nodes_tension=None):
     plt.figure()
-    plt.triplot(positions[:, 0], positions[:, 1], triangle_indices)
+    plt.triplot(positions[:, 0], positions[:, 1], triangles=triangle_indices)
     if nodes_interface is not None:
         plt.scatter(positions[nodes_interface, 0], positions[nodes_interface, 1], color="blue")
     if nodes_interpenetrating is not None and nodes_tension is not None:
