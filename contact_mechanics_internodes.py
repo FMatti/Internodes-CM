@@ -251,7 +251,7 @@ def find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C
 
     return rbf_radius_parameters_primary, rbf_radius_parameters_secondary, interface_primary_mask, interface_secondary_mask
 
-def construct_rbf_matrix(positions, positions_ref, radiuses_ref, rbf):
+def construct_rbf_matrix(positions, positions_ref, radiuses_ref, rbf=wendland_rbf):
     """Construct radial basis matrix $\Phi_{NM}$.
     
     Reference
@@ -260,7 +260,7 @@ def construct_rbf_matrix(positions, positions_ref, radiuses_ref, rbf):
     """
     return rbf(sp.spatial.distance.cdist(positions.reshape(len(positions), -1), positions_ref.reshape(len(positions_ref), -1)), radiuses_ref)
 
-def construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf):
+def construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf=wendland_rbf):
     """Construct interpolation matrix $\R_{NM}$.
 
     Reference
@@ -277,6 +277,108 @@ def construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf):
     # Compute the diagonal rescaling factors (diagonal entries of $D_{NN}$)
     scaling_factors = np.sum(interpolation_matrix, axis=1)[:, np.newaxis]
     return sp.sparse.csr_matrix(interpolation_matrix / scaling_factors)
+
+def compute_normals(nodal_positions, nodes, surface_connectivity, dim):
+    """Compute the normals.
+
+    Parameters
+    ----------
+    nodal_positions : np.ndarray
+        Positions of nodes.
+    nodes : np.ndarray 
+        Nodes for which the normals are computed for.
+    surface_connectivity : np.ndarray
+        Surface connectivity of the boundary elements in the mesh.
+
+    Returns
+    -------
+    node_normals : np.ndarray
+        Average of surface normals of elements adjacent to each node.
+    """
+
+    # Compute tangents corresponding to the elements at new positions
+    if dim == 2:
+        tangent1 = nodal_positions[surface_connectivity[:, 1]] - nodal_positions[surface_connectivity[:, 0]]
+        tangent2 = [0, 0, 1]
+    elif dim == 3:
+        tangent1 = nodal_positions[surface_connectivity[:, 1]] - nodal_positions[surface_connectivity[:, 0]]
+        tangent2 = nodal_positions[surface_connectivity[:, 2]] - nodal_positions[surface_connectivity[:, 0]]
+
+    # Compute normal vectors to all the boundary elements
+    surface_normals = np.cross(tangent1, tangent2)[:, :dim]
+
+    node_normals = np.zeros((len(nodes), dim))
+    for j, node in enumerate(nodes):
+        id = np.isin(surface_connectivity, node).any(axis=1)
+
+        # Compute average surface normal for each candidate node
+        node_normals[j] = np.sum(surface_normals[id] / np.linalg.norm(surface_normals[id], axis=1)[:, np.newaxis], axis=0)
+
+    node_normals /= np.linalg.norm(node_normals, axis=1)[:, np.newaxis]
+
+    return node_normals
+
+def compute_nodal_gaps(positions, positions_ref, radiuses_ref, rbf=wendland_rbf):
+    interpolation_matrix = construct_interpolation_matrix(positions, positions_ref, radiuses_ref, rbf)
+    nodal_gaps = interpolation_matrix * positions_ref - positions
+    return nodal_gaps
+
+def find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, rbf=wendland_rbf, tolerance=0.9, mesh_size=0.1):
+    """Find the nodes on secondary and primary interface that penetrate.
+    TODO: Require reference and make mesh size configurable!!
+    
+    Parameters
+    ----------
+    positions_new : np.ndarray
+        New positions of nodes after solving the INTERNODES system.
+    normals_interface_primary : np.ndarray
+        Normal vectors of primary interface.
+    normals_interface_secondary : np.ndarray
+        Normal vectors of secondary interface.
+    tolerance : float in (0, 1), default is 0.9
+        Tolerance for what counts as penetration or not.
+    mesh_size : float, default is 0.05 (TODO: No default but adaptive)
+        Representative size of mesh to determine when penetration happens.
+
+    Returns
+    -------
+    nodes_penetration_primary : np.ndarray
+        Nodes of primary interface where penetration is observed.
+    nodes_penetration_secondary : np.ndarray
+        Nodes of secondary interface where penetration is observed.
+    """
+
+    positions_candidate_primary = nodal_positions[nodes_candidate_primary]
+    positions_candidate_secondary = nodal_positions[nodes_candidate_secondary]
+
+    # Find contact nodes with contact detection algorithm
+    rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary_mask, nodes_interface_secondary_mask = find_interface_nodes(positions_candidate_primary, positions_candidate_secondary)
+
+    # Update positions of primary and secondary nodes along interface
+    positions_interface_primary = positions_candidate_primary[nodes_interface_primary_mask]
+    positions_interface_secondary = positions_candidate_secondary[nodes_interface_secondary_mask]
+
+    # Update normals of primary and secondary nodes along interface
+    normals_interface_primary = normals_candidates_primary[nodes_interface_primary_mask]
+    normals_interface_secondary = normals_candidates_secondary[nodes_interface_secondary_mask]
+
+    R12 = construct_interpolation_matrix(positions_interface_primary, positions_interface_secondary, rbf_radius_parameters_secondary, rbf)
+    R21 = construct_interpolation_matrix(positions_interface_secondary, positions_interface_primary, rbf_radius_parameters_primary, rbf)
+
+    # Determine the size of the nodal gaps on interface
+    nodal_gaps_primary = R12 * positions_interface_secondary - positions_interface_primary
+    nodal_gaps_secondary = R21 * positions_interface_primary - positions_interface_secondary
+
+    # Penetration if projected nodal gap onto normal is sufficiently small
+    threshold = - tolerance * mesh_size
+    penetrates_secondary = np.sum(nodal_gaps_primary * normals_interface_primary, axis=1) < threshold
+    penetrates_primary = np.sum(nodal_gaps_secondary * normals_interface_secondary, axis=1) < threshold
+
+    # Add the nodes where penetration is observed to the interface
+    nodes_penetration_primary = nodes_candidate_primary[nodes_interface_primary_mask][penetrates_secondary]
+    nodes_penetration_secondary = nodes_candidate_secondary[nodes_interface_secondary_mask][penetrates_primary]
+
+    return nodes_penetration_primary, nodes_penetration_secondary
 
 class ContactMechanicsInternodes(object):
 
@@ -355,7 +457,7 @@ class ContactMechanicsInternodes(object):
         self.dofs_interface_primary = nodes_to_dofs(self.nodes_interface_primary, dim=self.dim)
         self.dofs_interface_secondary = nodes_to_dofs(self.nodes_interface_secondary, dim=self.dim)
 
-    def assemble_interpolation_matrices(self):
+    def _assemble_interpolation_matrices(self):
         """Assemble the interpolation matrices $R_{12}$ and $R_{21}$.
         
         Reference
@@ -365,7 +467,7 @@ class ContactMechanicsInternodes(object):
         self.R12 = construct_interpolation_matrix(self.positions_interface_primary, self.positions_interface_secondary, self.rbf_radius_parameters_secondary, self.rbf)
         self.R21 = construct_interpolation_matrix(self.positions_interface_secondary, self.positions_interface_primary, self.rbf_radius_parameters_primary, self.rbf)
 
-    def assemble_interface_mass_matrices(self):
+    def _assemble_interface_mass_matrices(self):
         """Assemble the interface mass matrices $M_1, M_2$.
 
         Reference
@@ -384,14 +486,14 @@ class ContactMechanicsInternodes(object):
         self.M1 = sp.sparse.csr_matrix(self.M1)
         self.M2 = sp.sparse.csr_matrix(self.M2)
 
-    def assemble_stiffness_matrix(self):
+    def _assemble_stiffness_matrix(self):
         """Assemble the global stiffness matrix $K$."""
         self.model.assembleStiffnessMatrix()
         self.K = self.model.getDOFManager().getMatrix('K')
         self.K = aka.AkantuSparseMatrix(self.K).toarray()
         self.K = sp.sparse.csr_matrix(self.K)
 
-    def assemble_B_matrices(self):
+    def _assemble_B_matrices(self):
         """Assemble block components of INTERNODES matrix.
 
         Reference
@@ -417,7 +519,7 @@ class ContactMechanicsInternodes(object):
         self.B = sp.sparse.csr_matrix(self.B)
         self.B_tilde = sp.sparse.csr_matrix(self.B_tilde)
 
-    def assemble_internodes_matrix(self):
+    def _assemble_internodes_matrix(self):
         """Assemble the INTERNODES matrix.
 
         Reference
@@ -433,7 +535,7 @@ class ContactMechanicsInternodes(object):
             )])
         ])
 
-    def assemble_force_term(self):
+    def _assemble_force_term(self):
         """Assemble the force term.
 
         Reference
@@ -452,12 +554,12 @@ class ContactMechanicsInternodes(object):
         self.force_term = np.concatenate([virtual_force, nodal_gaps.ravel()])
 
     def assemble_full_model(self):
-        self.assemble_interpolation_matrices()
-        self.assemble_stiffness_matrix()
-        self.assemble_interface_mass_matrices()
-        self.assemble_B_matrices()
-        self.assemble_internodes_matrix()
-        self.assemble_force_term()
+        self._assemble_interpolation_matrices()
+        self._assemble_stiffness_matrix()
+        self._assemble_interface_mass_matrices()
+        self._assemble_B_matrices()
+        self._assemble_internodes_matrix()
+        self._assemble_force_term()
 
     def solve_direct(self):
         """Solve the INTERNODES system of equations.
@@ -510,8 +612,8 @@ class ContactMechanicsInternodes(object):
         positions_new = self.nodal_positions + displacements
 
         # Compute the normals
-        normals_candidate_primary = self.compute_normals(positions_new, self.nodes_candidate_primary, self.connectivity_candidate_primary)
-        normals_candidate_secondary = self.compute_normals(positions_new, self.nodes_candidate_secondary, self.connectivity_candidate_secondary)
+        normals_candidate_primary = compute_normals(positions_new, self.nodes_candidate_primary, self.connectivity_candidate_primary, self.dim)
+        normals_candidate_secondary = compute_normals(positions_new, self.nodes_candidate_secondary, self.connectivity_candidate_secondary, self.dim)
         normals_interface_primary = normals_candidate_primary[np.in1d(self.nodes_candidate_primary, self.nodes_interface_primary)]
         normals_interface_secondary = normals_candidate_secondary[np.in1d(self.nodes_candidate_secondary, self.nodes_interface_secondary)]
 
@@ -526,7 +628,7 @@ class ContactMechanicsInternodes(object):
         nodes_to_dump_secondary = self.nodes_interface_secondary[positive_lambda_proj_secondary]
 
         # Add new nodes to primary and secondary
-        nodes_to_add_primary, nodes_to_add_secondary = self.detect_penetration_nodes(positions_new, normals_candidate_primary, normals_candidate_secondary)
+        nodes_to_add_primary, nodes_to_add_secondary = find_penetration_nodes(positions_new, self.nodes_candidate_primary, self.nodes_candidate_secondary, normals_candidate_primary, normals_candidate_secondary, rbf=self.rbf)
         self.nodes_interface_primary = np.union1d(self.nodes_interface_primary, nodes_to_add_primary)
         self.nodes_interface_secondary = np.union1d(self.nodes_interface_secondary, nodes_to_add_secondary)
 
@@ -548,102 +650,3 @@ class ContactMechanicsInternodes(object):
         self.positions_interface_secondary = self.nodal_positions[self.nodes_interface_secondary]
 
         return False
-
-    def compute_normals(self, positions_new, nodes, connectivity):
-        """Compute the normals.
-
-        Parameters
-        ----------
-        positions_new : np.ndarray
-            New positions of nodes after solving the INTERNODES system.
-        nodes : np.ndarray 
-            Nodes for which the normals are computed for.
-        segments : np.ndarray
-            Connectivity of the line segments in the mesh.
-        triangles : np.ndarray
-            Connectivity of the triangular elements in the mesh.
-
-        Returns
-        -------
-        normals_avg : np.ndarray
-        """
-
-        # Compute tangents corresponding to the elements at new positions
-        if self.dim == 2:
-            tangent1 = positions_new[connectivity[:, 1]] - positions_new[connectivity[:, 0]]
-            tangent2 = [0, 0, 1]
-        elif self.dim == 3:
-            tangent1 = positions_new[connectivity[:, 1]] - positions_new[connectivity[:, 0]]
-            tangent2 = positions_new[connectivity[:, 2]] - positions_new[connectivity[:, 0]]
-
-        # Compute normal vectors
-        normals = np.cross(tangent1, tangent2)[:, :self.dim]
-
-        normals_avg = np.zeros((len(nodes), self.dim))
-        for j, node in enumerate(nodes):
-            id = np.isin(connectivity, node).any(axis=1)
-
-            # Compute average surface normal for each candidate node
-            normals_avg[j] = np.sum(normals[id] / np.linalg.norm(normals[id], axis=1)[:, np.newaxis], axis=0)
-
-        normals_avg /= np.linalg.norm(normals_avg, axis=1)[:, np.newaxis]
-
-        return normals_avg
-
-    def detect_penetration_nodes(self, positions_new, normals_candidates_primary, normals_candidates_secondary, tolerance=0.9, mesh_size=0.1):
-        """Detect the nodes on secondary and primary interface that penetrate.
-        TODO: Require reference and make mesh size configurable!!
-        
-        Parameters
-        ----------
-        positions_new : np.ndarray
-            New positions of nodes after solving the INTERNODES system.
-        normals_interface_primary : np.ndarray
-            Normal vectors of primary interface.
-        normals_interface_secondary : np.ndarray
-            Normal vectors of secondary interface.
-        tolerance : float in (0, 1), default is 0.9
-            Tolerance for what counts as penetration or not.
-        mesh_size : float, default is 0.05 (TODO: No default but adaptive)
-            Representative size of mesh to determine when penetration happens.
-        
-        Returns
-        -------
-        nodes_penetration_primary : np.ndarray
-            Nodes of primary interface where penetration is observed.
-        nodes_penetration_secondary : np.ndarray
-            Nodes of secondary interface where penetration is observed.
-        """
-
-        # Update positions of primary and secondary nodes along interface
-        positions_candidate_primary = positions_new[self.nodes_candidate_primary]
-        positions_candidate_secondary = positions_new[self.nodes_candidate_secondary]
-
-        # Find contact nodes with contact detection algorithm
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary_mask, nodes_interface_secondary_mask = find_interface_nodes(positions_candidate_primary, positions_candidate_secondary)
-
-        # Update positions of primary and secondary nodes along interface
-        positions_interface_primary = positions_candidate_primary[nodes_interface_primary_mask]
-        positions_interface_secondary = positions_candidate_secondary[nodes_interface_secondary_mask]
-
-        # Update normals of primary and secondary nodes along interface
-        normals_interface_primary = normals_candidates_primary[nodes_interface_primary_mask]
-        normals_interface_secondary = normals_candidates_secondary[nodes_interface_secondary_mask]
-
-        R12 = construct_interpolation_matrix(positions_interface_primary, positions_interface_secondary, rbf_radius_parameters_secondary, self.rbf)
-        R21 = construct_interpolation_matrix(positions_interface_secondary, positions_interface_primary, rbf_radius_parameters_primary, self.rbf)
-
-        # Determine the size of the nodal gaps on interface
-        nodal_gaps_primary = R12 * positions_interface_secondary - positions_interface_primary
-        nodal_gaps_secondary = R21 * positions_interface_primary - positions_interface_secondary
-
-        # Penetration if projected nodal gap onto normal is sufficiently small
-        threshold = - tolerance * mesh_size
-        penetrates_secondary = np.sum(nodal_gaps_primary * normals_interface_primary, axis=1) < threshold
-        penetrates_primary = np.sum(nodal_gaps_secondary * normals_interface_secondary, axis=1) < threshold
-
-        # Add the nodes where penetration is observed to the interface
-        nodes_penetration_primary = self.nodes_candidate_primary[nodes_interface_primary_mask][penetrates_secondary]
-        nodes_penetration_secondary = self.nodes_candidate_secondary[nodes_interface_secondary_mask][penetrates_primary]
-
-        return nodes_penetration_primary, nodes_penetration_secondary

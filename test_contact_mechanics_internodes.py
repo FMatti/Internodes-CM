@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import scipy as sp
+import matplotlib.tri as tri
 
 from helper import get_theoretical_normal_displacement
 from contact_mechanics_internodes import *
@@ -152,8 +153,66 @@ def test_construct_gap_function_interpolation_random():
         np.testing.assert_allclose(g_parabolic(positions_interpolated_primary[:, :-1].T), positions_interpolated_primary[:, -1], atol=2e-2)
         np.testing.assert_allclose(g_zeros(positions_interpolated_secondary[:, :-1].T), positions_interpolated_secondary[:, -1], atol=2e-2)
 
-def test_contact3d_problem():
+def test_compute_normals_plane():
 
+    n_grid = 50
+
+    for dim in [2, 3]:
+
+        connectivity = np.arange(n_grid)
+        g_zeros = lambda x: np.zeros(x.shape[1])
+        g_parabolic_grad = lambda x: -np.zeros_like(x)
+        nodal_positions = _get_uniform_interface_grid(dim, g_zeros, n_grid=n_grid)
+
+        if dim == 2:
+            nodes = np.argsort(nodal_positions[:, 0])
+            connectivity = np.c_[nodes[1:], nodes[:-1]]
+        if dim == 3:
+            connectivity = tri.Triangulation(nodal_positions[:, 0], nodal_positions[:, 1]).triangles
+
+        normals = compute_normals(nodal_positions, np.arange(n_grid**(dim-1)), connectivity, dim)
+
+        normals_ex = np.c_[g_parabolic_grad(nodal_positions[:, :-1]), np.ones_like(nodal_positions[:, -1])]
+        normals_ex /= np.linalg.norm(normals_ex, axis=1)[:, np.newaxis]
+
+        if dim == 2:
+            inner_nodes = ~(np.abs(nodal_positions[:, 0]) == 1)
+        elif dim == 3:
+            inner_nodes = ~np.logical_or(np.abs(nodal_positions[:, 0]) == 1, np.abs(nodal_positions[:, 1] == 1))
+
+        np.testing.assert_allclose(normals_ex[inner_nodes], normals[inner_nodes], atol=1e-10)
+
+def test_compute_normals_parabolic():
+
+    n_grid = 50
+
+    for dim in [2, 3]:
+
+        connectivity = np.arange(n_grid)
+        g_parabolic = lambda x: np.sum(x**2, axis=0)
+        g_parabolic_grad = lambda x: -2*x
+        nodal_positions = _get_uniform_interface_grid(dim, g_parabolic, n_grid=n_grid)
+
+        if dim == 2:
+            nodes = np.argsort(nodal_positions[:, 0])
+            connectivity = np.c_[nodes[1:], nodes[:-1]]
+        if dim == 3:
+            connectivity = tri.Triangulation(nodal_positions[:, 0], nodal_positions[:, 1]).triangles
+
+        normals = compute_normals(nodal_positions, np.arange(n_grid**(dim-1)), connectivity, dim)
+
+        normals_ex = np.c_[g_parabolic_grad(nodal_positions[:, :-1]), np.ones_like(nodal_positions[:, -1])]
+        normals_ex /= np.linalg.norm(normals_ex, axis=1)[:, np.newaxis]
+
+        if dim == 2:
+            inner_nodes = ~(np.abs(nodal_positions[:, 0]) == 1)
+        elif dim == 3:
+            inner_nodes = ~np.logical_or(np.abs(nodal_positions[:, 0]) == 1, np.abs(nodal_positions[:, 1] == 1))
+
+        np.testing.assert_allclose(normals_ex[inner_nodes], normals[inner_nodes], atol=2e-2)
+
+def test_contact_problem_3d():
+    """
     # Set up contact problem
     mesh_file = 'mesh/contact3d_sphere.msh'
     material_file = 'material/material.dat'
@@ -222,8 +281,9 @@ def test_contact3d_problem():
         u_list[j] = np.min(positions_interface_secondary[:, 1])
 
     np.testing.assert_allclose(get_theoretical_normal_displacement(R, d_list, E, nu), u_list, atol=5e-3)
+    """
 
-def test_contact2d_problem():
+def test_contact_problem_2d():
     """
     # Set up contact problem
     mesh_file = 'mesh/contact2d_circle.msh'
