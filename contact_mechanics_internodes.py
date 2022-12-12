@@ -65,34 +65,6 @@ def expand_to_dim(matrix, dim):
     """
     return sp.sparse.kron(matrix, np.eye(dim), format='csr')
 
-def remove_rows_without_items(matrix, items):
-    """Remove rows from matrix that are not contained in items.
-
-    Parameters
-    ----------
-    matrix : 2D np.ndarray
-        A matrix.
-    items : 1D np.ndarray or list
-        A list with items.
-
-    Returns
-    -------
-    matrix_removed : 2D np.ndarray
-        The matrix where all rows without an item have been eliminated.
-
-    Example
-    -------
-    >>> matrix = np.array([[1, 2],
-    >>>                    [3, 4],
-    >>>                    [5, 6],
-    >>>                    [7, 8]])
-    >>> items = [3, 8]
-    >>> remove_rows_without_items(matrix, items)
-    >>>   = array([[3, 4],
-                   [7, 8]])
-    """
-    return matrix[np.isin(matrix, items).any(axis=1)]
-
 def remove_rows_without_all_items(matrix, items):
     """Remove rows from matrix that are not fully contained in items.
 
@@ -138,7 +110,7 @@ def wendland_rbf(distances, radiuses):
     """
     return wendland(distances / radiuses)
 
-def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
+def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5):
     """Iteratively compute radius parameters for radial basis functions until
     invertibility conditions are satisfied (increase 'c' in every iteration).
 
@@ -146,11 +118,11 @@ def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
     ----------
     positions : np.ndarray
         Positions of interpolation nodes.
+        rbf : function, default is wendland
+        The radial basis function being used.
     c : float in (0, 1), default is 0.5
         [1], Page 51, Section 2.3, Equation 2
         (The empirical default value is given at the right on same page)
-    rbf : function, default is wendland
-        The radial basis function being used.
 
     Returns
     -------
@@ -181,7 +153,7 @@ def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
 
         # Check if criterion [1], Page 51, Section 2.3, Equation 4 is satisfied
         # for all interpolation nodes
-        if np.max(n_supports_interpolation) < 1 / rbf(c):
+        if np.max(n_supports_interpolation) < 1 / rbf(c, 1):
             break
 
         # If criterion was not satisfied, increase c and reiterate the procedure
@@ -191,7 +163,7 @@ def compute_rbf_radius_parameters(positions, rbf=wendland, c=0.5):
 
     return rbf_radius_parameters
 
-def find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95):
+def find_interface_nodes(positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95):
     """Find contact/interface nodes while trying to satisfy the constraints.
 
     Parameters
@@ -318,7 +290,7 @@ def compute_normals(nodal_positions, nodes, surface_connectivity, dim):
 
     return node_normals
 
-def find_penetration_nodes(positions_primary, positions_secondary, normals_primary, normals_secondary, n=5):
+def find_penetration_nodes(positions_primary, positions_secondary, normals_primary, normals_secondary, n=2):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
 
@@ -357,12 +329,12 @@ def find_penetration_nodes(positions_primary, positions_secondary, normals_prima
     inner_primary = np.sum(gaps_primary_to_secondary * normals_secondary[closest_secondary_to_primary_nodes], axis=2)
     inner_secondary = np.sum(gaps_secondary_to_primary * normals_primary[closest_primary_to_secondary_nodes], axis=2)
 
-    penetration_node_primary = ~np.any(inner_primary < 1e-2, axis=1)
-    penetration_node_secondary = ~np.any(inner_secondary < 1e-2, axis=1)
+    penetration_node_primary = ~np.any(inner_primary < -1e-3, axis=1)
+    penetration_node_secondary = ~np.any(inner_secondary < -1e-3, axis=1)
 
     return penetration_node_primary, penetration_node_secondary
 
-def old_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, rbf=wendland_rbf, tolerance=0.9, mesh_size=0.1):
+def old_find_penetration_nodes(positions_primary, positions_secondary, normals_candidates_primary, normals_candidates_secondary, rbf=wendland_rbf, tolerance=0.9, mesh_size=0.1):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
 
@@ -387,15 +359,12 @@ def old_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_c
         Nodes of secondary interface where penetration is observed.
     """
 
-    positions_candidate_primary = nodal_positions[nodes_candidate_primary]
-    positions_candidate_secondary = nodal_positions[nodes_candidate_secondary]
-
     # Find contact nodes with contact detection algorithm
-    rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary_mask, nodes_interface_secondary_mask = find_interface_nodes(positions_candidate_primary, positions_candidate_secondary)
+    rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_interface_primary_mask, nodes_interface_secondary_mask = find_interface_nodes(positions_primary, positions_secondary)
 
     # Update positions of primary and secondary nodes along interface
-    positions_interface_primary = positions_candidate_primary[nodes_interface_primary_mask]
-    positions_interface_secondary = positions_candidate_secondary[nodes_interface_secondary_mask]
+    positions_interface_primary = positions_primary[nodes_interface_primary_mask]
+    positions_interface_secondary = positions_secondary[nodes_interface_secondary_mask]
 
     # Update normals of primary and secondary nodes along interface
     normals_interface_primary = normals_candidates_primary[nodes_interface_primary_mask]
@@ -413,18 +382,13 @@ def old_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_c
     penetrates_secondary = np.sum(nodal_gaps_primary * normals_interface_primary, axis=1) < threshold
     penetrates_primary = np.sum(nodal_gaps_secondary * normals_interface_secondary, axis=1) < threshold
 
-    nodes_penetration_primary_new, nodes_penetration_secondary_new = new_find_penetration_nodes(nodal_positions, nodes_candidate_primary, nodes_candidate_secondary, normals_candidates_primary, normals_candidates_secondary, n=3)
+    penetration_node_primary = nodes_interface_primary_mask
+    penetration_node_secondary = nodes_interface_secondary_mask
 
-    #print(nodes_penetration_primary_new)
-    #print(nodes_penetration_secondary_new)
-    non_interface_penetrations_primary = nodes_penetration_primary_new#np.setdiff1d(nodes_penetration_primary_new, nodes_candidate_primary[nodes_interface_primary_mask])
-    non_interface_penetrations_secondary = nodes_penetration_secondary_new#np.setdiff1d(nodes_penetration_secondary_new, nodes_candidate_secondary[nodes_interface_secondary_mask])
+    penetration_node_primary[nodes_interface_primary_mask] = penetrates_secondary
+    penetration_node_secondary[nodes_interface_secondary_mask] = penetrates_primary
 
-    # Add the nodes where penetration is observed to the interface
-    nodes_penetration_primary = nodes_candidate_primary[nodes_interface_primary_mask][penetrates_secondary]
-    nodes_penetration_secondary = nodes_candidate_secondary[nodes_interface_secondary_mask][penetrates_primary]
-
-    return np.union1d(nodes_penetration_primary, non_interface_penetrations_primary), np.union1d(nodes_penetration_secondary, non_interface_penetrations_secondary)
+    return penetration_node_primary, penetration_node_secondary
 
 class ContactMechanicsInternodes(object):
 
@@ -476,32 +440,6 @@ class ContactMechanicsInternodes(object):
 
         self.internodes_matrix = None  # INTERNODES matrix
         self.force_term = None  # Force term b
-
-    def find_interface_nodes(self):
-        """Find contact/interface nodes while trying to satisfy the constraints.
-
-        Reference
-        ---------
-        [1], Page 51, Section 2.3, Equation 2, 3, and 4
-        """
-        # Find the contact nodes and corresponding radial basis parameters
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, interface_primary_mask, interface_secondary_mask = find_interface_nodes(self.positions_interface_primary, self.positions_interface_secondary, rbf=wendland)
-
-        # Update current radius parameters of radial basis functions
-        self.rbf_radius_parameters_primary = rbf_radius_parameters_primary
-        self.rbf_radius_parameters_secondary = rbf_radius_parameters_secondary
-
-        # Update interface node sets
-        self.nodes_interface_primary = self.nodes_interface_primary[interface_primary_mask]
-        self.nodes_interface_secondary = self.nodes_interface_secondary[interface_secondary_mask]
-
-        # Update positions of interface node sets
-        self.positions_interface_primary = self.positions_interface_primary[interface_primary_mask]
-        self.positions_interface_secondary = self.positions_interface_secondary[interface_secondary_mask]
-
-        # Update degrees of freedom with new node indices obtained
-        self.dofs_interface_primary = nodes_to_dofs(self.nodes_interface_primary, dim=self.dim)
-        self.dofs_interface_secondary = nodes_to_dofs(self.nodes_interface_secondary, dim=self.dim)
 
     def _assemble_interpolation_matrices(self):
         """Assemble the interpolation matrices $R_{12}$ and $R_{21}$.
@@ -599,6 +537,32 @@ class ContactMechanicsInternodes(object):
     
         self.force_term = np.concatenate([virtual_force, nodal_gaps.ravel()])
 
+    def find_interface_nodes(self):
+        """Find contact/interface nodes while trying to satisfy the constraints.
+
+        Reference
+        ---------
+        [1], Page 51, Section 2.3, Equation 2, 3, and 4
+        """
+        # Find the contact nodes and corresponding radial basis parameters
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, interface_primary_mask, interface_secondary_mask = find_interface_nodes(self.positions_interface_primary, self.positions_interface_secondary, rbf=wendland_rbf)
+
+        # Update current radius parameters of radial basis functions
+        self.rbf_radius_parameters_primary = rbf_radius_parameters_primary
+        self.rbf_radius_parameters_secondary = rbf_radius_parameters_secondary
+
+        # Update interface node sets
+        self.nodes_interface_primary = self.nodes_interface_primary[interface_primary_mask]
+        self.nodes_interface_secondary = self.nodes_interface_secondary[interface_secondary_mask]
+
+        # Update positions of interface node sets
+        self.positions_interface_primary = self.positions_interface_primary[interface_primary_mask]
+        self.positions_interface_secondary = self.positions_interface_secondary[interface_secondary_mask]
+
+        # Update degrees of freedom with new node indices obtained
+        self.dofs_interface_primary = nodes_to_dofs(self.nodes_interface_primary, dim=self.dim)
+        self.dofs_interface_secondary = nodes_to_dofs(self.nodes_interface_secondary, dim=self.dim)
+
     def assemble_full_model(self):
         self._assemble_interpolation_matrices()
         self._assemble_stiffness_matrix()
@@ -660,32 +624,37 @@ class ContactMechanicsInternodes(object):
         # Compute the normals
         normals_candidate_primary = compute_normals(positions_new, self.nodes_candidate_primary, self.connectivity_candidate_primary, self.dim)
         normals_candidate_secondary = compute_normals(positions_new, self.nodes_candidate_secondary, self.connectivity_candidate_secondary, self.dim)
-        normals_interface_primary = normals_candidate_primary[np.in1d(self.nodes_candidate_primary, self.nodes_interface_primary)]
-        normals_interface_secondary = normals_candidate_secondary[np.in1d(self.nodes_candidate_secondary, self.nodes_interface_secondary)]
+        nodes_interface_primary_mask = np.in1d(self.nodes_candidate_primary, self.nodes_interface_primary)
+        nodes_interface_secondary_mask = np.in1d(self.nodes_candidate_secondary, self.nodes_interface_secondary)
+        normals_interface_primary = normals_candidate_primary[nodes_interface_primary_mask]
+        normals_interface_secondary = normals_candidate_secondary[nodes_interface_secondary_mask]
 
         # Interpolate the Lagrange multipliers of the secondary
         # [1], Page 53, Section 3.2, Equation (11)
         lambdas_secondary = - self.R21 * lambdas
 
         # Mark nodes with positive projected Lagrange multipliers for dumping
-        positive_lambda_proj_primary = np.sum(lambdas * normals_interface_primary, axis=1) > 0
-        positive_lambda_proj_secondary = np.sum(lambdas_secondary * normals_interface_secondary, axis=1) > 0
-        nodes_to_dump_primary = self.nodes_interface_primary[positive_lambda_proj_primary]
-        nodes_to_dump_secondary = self.nodes_interface_secondary[positive_lambda_proj_secondary]
+        positive_lambda_primary = np.sum(lambdas * normals_interface_primary, axis=1) > 0
+        positive_lambda_secondary = np.sum(lambdas_secondary * normals_interface_secondary, axis=1) > 0
+        nodes_to_dump_primary = self.nodes_interface_primary[positive_lambda_primary]
+        nodes_to_dump_secondary = self.nodes_interface_secondary[positive_lambda_secondary]
 
         # Add new nodes to primary and secondary
         positions_candidate_primary = positions_new[self.nodes_candidate_primary]
         positions_candidate_secondary = positions_new[self.nodes_candidate_secondary]
-        nodes_penetration_primary, nodes_penetration_secondary = find_penetration_nodes(positions_candidate_primary, positions_candidate_secondary, normals_candidate_primary, normals_candidate_secondary)
-        nodes_to_add_primary = self.nodes_candidate_primary[nodes_penetration_primary]
-        nodes_to_add_secondary = self.nodes_candidate_secondary[nodes_penetration_secondary]
-        print(nodes_to_add_primary)
-        print(nodes_to_add_secondary)
+        nodes_penetration_primary, nodes_penetration_secondary = old_find_penetration_nodes(positions_candidate_primary, positions_candidate_secondary, normals_candidate_primary, normals_candidate_secondary)
+        nodes_to_add_primary = self.nodes_candidate_primary[np.logical_and(nodes_penetration_primary, ~nodes_interface_primary_mask)]
+        nodes_to_add_secondary = self.nodes_candidate_secondary[np.logical_and(nodes_penetration_secondary, ~nodes_interface_secondary_mask)]
+
+        # Add penetration nodes
+        self.nodes_interface_primary = np.union1d(self.nodes_interface_primary, nodes_to_add_primary)
+        self.nodes_interface_secondary = np.union1d(self.nodes_interface_secondary, nodes_to_add_secondary)
+
         # If projected Lagrange multipliers are all negative
-        if not (positive_lambda_proj_primary.any() or positive_lambda_proj_secondary.any()):
+        if len(nodes_to_dump_primary) + len(nodes_to_dump_secondary) == 0:
 
             # Convergence if all penetration nodes are already in interface
-            if not (nodes_penetration_primary.any() or nodes_penetration_secondary.any()):
+            if len(nodes_to_add_primary) + len(nodes_to_add_secondary) == 0:
                 return True
 
         else:
@@ -693,9 +662,6 @@ class ContactMechanicsInternodes(object):
             self.nodes_interface_primary = np.setdiff1d(self.nodes_interface_primary, nodes_to_dump_primary)
             self.nodes_interface_secondary = np.setdiff1d(self.nodes_interface_secondary, nodes_to_dump_secondary)
 
-        # Add penetration nodes
-        self.nodes_interface_primary = np.union1d(self.nodes_interface_primary, nodes_to_add_primary)
-        self.nodes_interface_secondary = np.union1d(self.nodes_interface_secondary, nodes_to_add_secondary)
 
         # Update interface positions according to new set of interface nodes
         self.positions_interface_primary = self.nodal_positions[self.nodes_interface_primary]

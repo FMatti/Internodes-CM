@@ -28,7 +28,7 @@ def _check_rbf_radius_conditions(positions, rbf_radius_parameters, c_min=0.49, c
 
     # Check condition: [1], Page 51, Section 2.3, Equation 4
     n_supports = np.sum(dist_MM < rbf_radius_parameters, axis=0)
-    n_supports_max = np.ones_like(n_supports) / wendland(c_max)
+    n_supports_max = np.ones_like(n_supports) / wendland_rbf(c_max, 1)
     np.testing.assert_array_less(n_supports,  n_supports_max)
 
 def _check_node_contained_in_support(positions, positions_ref, rbf_radius_parameters, C_max=0.99):
@@ -76,7 +76,7 @@ def test_find_interface_nodes_regular():
         positions_primary = _get_uniform_interface_grid(dim, g_zeros, n_grid=10)
         positions_secondary = _get_uniform_interface_grid(dim, g_parabolic, n_grid=10)
 
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95)
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95)
         _check_node_contained_in_support(positions_primary[nodes_primary], positions_secondary[nodes_secondary], rbf_radius_parameters_primary)
         _check_node_contained_in_support(positions_secondary[nodes_secondary], positions_primary[nodes_primary], rbf_radius_parameters_secondary)
 
@@ -89,7 +89,7 @@ def test_find_interface_nodes_random():
         positions_primary = _get_random_interface_grid(dim, g_zeros, n_grid=10)
         positions_secondary = _get_random_interface_grid(dim, g_parabolic, n_grid=10)
 
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95)
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95)
         _check_node_contained_in_support(positions_primary[nodes_primary], positions_secondary[nodes_secondary], rbf_radius_parameters_primary)
         _check_node_contained_in_support(positions_secondary[nodes_secondary], positions_primary[nodes_primary], rbf_radius_parameters_secondary)
 
@@ -124,7 +124,7 @@ def test_construct_gap_function_interpolation_regular():
         positions_primary = _get_uniform_interface_grid(dim, g_zeros, n_grid=10)
         positions_secondary = _get_uniform_interface_grid(dim, g_parabolic, n_grid=10)
 
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95)
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95)
         R12 = construct_interpolation_matrix(positions_primary[nodes_primary], positions_secondary[nodes_secondary], rbf_radius_parameters_secondary, rbf=wendland_rbf)
         R21 = construct_interpolation_matrix(positions_secondary[nodes_secondary], positions_primary[nodes_primary], rbf_radius_parameters_primary, rbf=wendland_rbf)
         positions_interpolated_primary = R12 * positions_secondary[nodes_secondary]
@@ -144,7 +144,7 @@ def test_construct_gap_function_interpolation_random():
         nodes_primary = np.arange(len(positions_primary))
         nodes_secondary = np.arange(len(positions_secondary))
 
-        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland, C=0.95)
+        rbf_radius_parameters_primary, rbf_radius_parameters_secondary, nodes_primary, nodes_secondary = find_interface_nodes(positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95)
         R12 = construct_interpolation_matrix(positions_primary[nodes_primary], positions_secondary[nodes_secondary], rbf_radius_parameters_secondary, rbf=wendland_rbf)
         R21 = construct_interpolation_matrix(positions_secondary[nodes_secondary], positions_primary[nodes_primary], rbf_radius_parameters_primary, rbf=wendland_rbf)
         positions_interpolated_primary = R12 * positions_secondary[nodes_secondary]
