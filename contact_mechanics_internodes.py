@@ -401,7 +401,7 @@ def find_penetration_nodes(
     normals_candidates_secondary,
     rbf=wendland_rbf,
     tolerance=0.9,
-    mesh_size=0.1,
+    mesh_size=0.02,
 ):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
@@ -713,6 +713,14 @@ class ContactMechanicsInternodes(object):
         )
         self.dofs_interface_secondary = nodes_to_dofs(
             self.nodes_interface_secondary, dim=self.dim
+        )
+
+    def update_rbf_radius_parameters(self):
+        self.rbf_radius_parameters_primary = compute_rbf_radius_parameters(
+            self.nodal_positions[self.nodes_interface_primary], rbf=self.rbf
+        )
+        self.rbf_radius_parameters_secondary = compute_rbf_radius_parameters(
+            self.nodal_positions[self.nodes_interface_secondary], rbf=self.rbf
         )
 
     def assemble_full_model(self):
