@@ -165,7 +165,7 @@ def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5):
 
     return rbf_radius_parameters
 
-def find_interface_nodes(
+def find_interpolation_nodes(
     positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95
 ):
     """Find contact/interface nodes while trying to satisfy the constraints.
@@ -433,7 +433,7 @@ def find_penetration_nodes(
         rbf_radius_parameters_secondary,
         nodes_interface_primary_mask,
         nodes_interface_secondary_mask,
-    ) = find_interface_nodes(positions_primary, positions_secondary)
+    ) = find_interpolation_nodes(positions_primary, positions_secondary)
 
     # Update positions of primary and secondary nodes along interface
     positions_interface_primary = positions_primary[nodes_interface_primary_mask]
@@ -668,7 +668,7 @@ class ContactMechanicsInternodes(object):
 
         self.force_term = np.concatenate([virtual_force, nodal_gaps.ravel()])
 
-    def find_interface_nodes(self):
+    def define_interface(self):
         """Find contact/interface nodes while trying to satisfy the constraints.
 
         Reference
@@ -681,7 +681,7 @@ class ContactMechanicsInternodes(object):
             rbf_radius_parameters_secondary,
             interface_primary_mask,
             interface_secondary_mask,
-        ) = find_interface_nodes(
+        ) = find_interpolation_nodes(
             self.positions_interface_primary,
             self.positions_interface_secondary,
             rbf=wendland_rbf,
@@ -713,14 +713,6 @@ class ContactMechanicsInternodes(object):
         )
         self.dofs_interface_secondary = nodes_to_dofs(
             self.nodes_interface_secondary, dim=self.dim
-        )
-
-    def update_rbf_radius_parameters(self):
-        self.rbf_radius_parameters_primary = compute_rbf_radius_parameters(
-            self.nodal_positions[self.nodes_interface_primary], rbf=self.rbf
-        )
-        self.rbf_radius_parameters_secondary = compute_rbf_radius_parameters(
-            self.nodal_positions[self.nodes_interface_secondary], rbf=self.rbf
         )
 
     def assemble_full_model(self):

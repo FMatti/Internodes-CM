@@ -13,7 +13,8 @@ def get_theoretical_pressure_amplitude(R, d, E, nu):
 def get_theoretical_normal_displacement(R, d, E, nu):
     a = get_theoretical_contact_radius(R, d)
     p0 = get_theoretical_pressure_amplitude(R, d, E, nu)
-    return - (1-nu**2)/E * np.pi/2 * p0 * a
+    K = np.pi/2
+    return - (1-nu**2)/E * K * p0 * a
 
 def plot_mesh(positions, triangle_indices, nodes_interface=None, nodes_interpenetrating=None, nodes_tension=None):
     plt.figure()
