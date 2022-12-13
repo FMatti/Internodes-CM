@@ -1,14 +1,11 @@
-l = 0.3;  // Target mesh size 
-r = 0.75; // Radius of parabola at top
-h = 0.3;  // Maximum height of candidate nodes
-d = 0.05; // Penetration depth of parabola
+l = 0.2;  // Mesh size
+r = 1.0;  // Radius of paraboloid at highest point
+y0 = 0.9;  // Position of tip of paraboloid
 
 // Discretization parameters
 ny = 10;
-nt = 5;
-Geometry.ExtrudeSplinePoints = nt;
+nt = 10;
 dy = r / (ny - 1);
-
 
 // ---> PRIMARY
 
@@ -61,60 +58,46 @@ Physical Volume("primary") = {1};
 
 // ---> SECONDARY
 
-// Generate parabola
-ny = 2*r / l; // Number of nodes along parabola
-dx = r / (ny - 1); // Spacing between nodes in x-direction
-j = 0;
-For i In {0:ny-1}
+// Origin point
+P0 = newp;
+P[0] = P0;
+Point(P0) = {0, y0, 0, l};
 
-    // Generate new point on parabola
-    x = i*dx;
-    y0 = 1 - d;
-    y = y0 + x*x;
-
-    p = newp;
-    Point(p) = {x, y, 0, l};
-    P[i] = p;
-
-    // Connect points with lines
-    If (i > 0)
-        l = newl;
-        Line(l) = {P[i-1], P[i]};
-        L[i-1] = l;
-        
-        // Add to candidate list if below height h
-        If (y < y0 + h)
-            C[j] = l;
-            j += 1;
-        EndIf
+For p In {1:ny}
+    x = p*dy;
+    If (p < ny)
+        // Parabolic function
+        y = y0 + x*x;
+    Else
+        // Set final point to 0 to close off surface
+        x = 0;
     EndIf
-EndFor
 
-// Close off the top
-p = newp;
-Point(p) = {0, y, 0, l};
-l = newl;
-Line(l) = {P[ny-1], p};
-Transfinite Curve{l} = ny;
-L[ny-1] = l;
+    // Generate new point on surface
+    Pp = newp;
+    Point(Pp) = {x, y, 0, l};
+    P[p] = Pp;
 
-For i In {0:ny-1}
-    extrusion[] = Extrude{{0, 0, 0}, {0, -1, 0}, {0, 0, 0}, Pi}{ Line{L[i]}; };
+    // Connect points with line
+    L = newl;
+    Line(L) = {P[p-1], P[p]};
+
+    // Revolution-extrude line segment twice (two half-turns)
+    extrusion[] = Extrude{{0, 0, 0}, {0, -1, 0}, {0, 0, 0}, Pi}{ Line{L}; };
     extrusion2[] = Extrude{{0, 0, 0}, {0, -1, 0}, {0, 0, 0}, Pi}{ Line{extrusion[0]}; };
-    S[2*i] = extrusion[1];
-    S[2*i + 1] = extrusion2[1];
-    If (i == 0)
+
+    If (p == 1)
         Physical Surface("secondary_candidate") = extrusion[1];
         Physical Surface("secondary_candidate") += extrusion2[1];
-    ElseIf (i == ny-1)
+    ElseIf (p == ny)
         Physical Surface("secondary_fixed") = extrusion[1];
         Physical Surface("secondary_fixed") += extrusion2[1];
-    ElseIf (i > 0)
+    ElseIf (p > 1)
         Physical Surface("secondary_candidate") += extrusion[1];
         Physical Surface("secondary_candidate") += extrusion2[1];
     EndIf
 EndFor
 
-Surface Loop(2) = {S};
+Surface Loop(2) = {21, 30, 39, 48, 57, 66, 75, 84, 93, 17, 26, 35, 44, 53, 62, 71, 80, 89, 98, 102};
 Volume(2) = {2};
 Physical Volume("secondary") = {2};

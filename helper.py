@@ -16,17 +16,49 @@ def get_theoretical_normal_displacement(R, d, E, nu):
     K = np.pi/2
     return - (1-nu**2)/E * K * p0 * a
 
-def plot_mesh(positions, triangle_indices, nodes_interface=None, nodes_interpenetrating=None, nodes_tension=None):
-    plt.figure()
-    plt.triplot(positions[:, 0], positions[:, 1], triangles=triangle_indices)
-    if nodes_interface is not None:
-        plt.scatter(positions[nodes_interface, 0], positions[nodes_interface, 1], color="blue")
-    if nodes_interpenetrating is not None and nodes_tension is not None:
-        plt.scatter(positions[nodes_interpenetrating, 0], positions[nodes_interpenetrating, 1], color="red")
-        plt.scatter(positions[nodes_tension, 0], positions[nodes_tension, 1], color="green")
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.axis('scaled')
+def plot_mesh(nodal_positions,
+              connectivity,
+              nodes_primary=None,
+              nodes_secondary=None,
+              nodes_candidate_primary=None,
+              nodes_candidate_secondary=None,
+              nodes_interface_primary=None,
+              nodes_interface_secondary=None,
+              nodes_added_primary=None,
+              nodes_added_secondary=None,
+              nodes_dumped_primary=None,
+              nodes_dumped_secondary=None,
+              savename=None):
+
+    plt.figure(figsize=(2.3, 1.6))
+    if nodes_primary is None and nodes_secondary is None:
+        plt.triplot(nodal_positions[:, 0], nodal_positions[:, 1], triangles=connectivity)
+    else:
+        connectivity_primary = connectivity[np.isin(connectivity, nodes_primary).any(axis=1)]
+        connectivity_secondary = connectivity[np.isin(connectivity, nodes_secondary).any(axis=1)]
+        plt.triplot(nodal_positions[:, 0], nodal_positions[:, 1], triangles=connectivity_primary, color='#0e437c', linewidth=0.25)
+        plt.triplot(nodal_positions[:, 0], nodal_positions[:, 1], triangles=connectivity_secondary, color='#d55209', linewidth=0.25)
+    if nodes_candidate_primary is not None:
+        plt.scatter(nodal_positions[nodes_candidate_primary, 0], nodal_positions[nodes_candidate_primary, 1], s=7, facecolors='none', edgecolors='#0e437c', linewidth=0.5)
+    if nodes_candidate_secondary is not None:
+        plt.scatter(nodal_positions[nodes_candidate_secondary, 0], nodal_positions[nodes_candidate_secondary, 1], s=7, facecolors='none', edgecolors='#d55209', linewidth=0.5)
+    if nodes_interface_primary is not None:
+        plt.scatter(nodal_positions[nodes_interface_primary, 0], nodal_positions[nodes_interface_primary, 1], s=7, color='#0e437c')
+    if nodes_interface_secondary is not None:
+        plt.scatter(nodal_positions[nodes_interface_secondary, 0], nodal_positions[nodes_interface_secondary, 1], s=7, color='#d55209')
+    if nodes_added_primary is not None:
+        plt.scatter(nodal_positions[nodes_added_primary, 0], nodal_positions[nodes_added_primary, 1], s=7, facecolors='none', edgecolors='#0e437c')
+    if nodes_added_secondary is not None:
+        plt.scatter(nodal_positions[nodes_added_secondary, 0], nodal_positions[nodes_added_secondary, 1], s=7, facecolors='none', edgecolors='#d55209')
+    if nodes_dumped_primary is not None:
+        plt.scatter(nodal_positions[nodes_dumped_primary, 0], nodal_positions[nodes_dumped_primary, 1], s=7, marker='x', color='#0e437c')
+    if nodes_dumped_secondary is not None:
+        plt.scatter(nodal_positions[nodes_dumped_secondary, 0], nodal_positions[nodes_dumped_secondary, 1], s=7, marker='x', color='#d55209')
+
+    plt.axis('off')
+    plt.ylim([-0.5, 0.5])
+    if savename is not None:
+        plt.savefig(savename, bbox_inches='tight')
     plt.show()
 
 def write_solution(mesh, new_nodal_positions):

@@ -1,0 +1,96 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage{stylesheet}
+
+\institution{EPFL}
+\project{Semester Project}
+\title{Internodes garbage}
+\author{Fabio Matti}
+\supervisor{Dr Guillaume Anciaux \\ Raquel Dantas Batista}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+\label{sec:intro}
+
+\clearpage
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{\linewidth}
+        \centering
+        \input{plots/example_initial.pgf}
+        \caption{Initial configuration}\label{fig:example-initial}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter0_interface.pgf}
+        \caption{Iteration 1: Find interface}\label{fig:example-iter0-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter0_solution.pgf}
+        \caption{Iteration 1: Solve system}\label{fig:example-iter0-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter0_dumping.pgf}
+        \caption{Iteration 1: Update interface}\label{fig:example-iter0-dumping}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter1_interface.pgf}
+        \caption{Iteration 2: Find interface}\label{fig:example-iter1-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter1_solution.pgf}
+        \caption{Iteration 2: Solve system}\label{fig:example-iter1-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter1_dumping.pgf}
+        \caption{Iteration 2: Update interface}\label{fig:example-iter1-dumping}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter2_interface.pgf}
+        \caption{Iteration 3: Find interface}\label{fig:example-iter2-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter2_solution.pgf}
+        \caption{Iteration 3: Solve system}\label{fig:example-iter2-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{plots/example_iter2_dumping.pgf}
+        \caption{Iteration 3: Update interface}\label{fig:example-iter2-dumping}
+    \end{subfigure}
+    \caption{First iteration}
+    \label{fig:example-iter2}
+\end{figure}
+
+\cite{deparis}
+
+\section{Experiments}
+\label{sec:experiments}
+
+\begin{figure}[ht]
+   \centering
+    \input{plots/normal_displacement_3d.pgf}
+    \caption{Normal displacements}
+    \label{fig:normal-displacements}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+     \input{plots/contact_radius_3d.pgf}
+     \caption{Contact radius}
+     \label{fig:contact-radius}
+ \end{figure}
+ 
+\section{Discussion}
+\label{sec:discussion}
+
+Flaws when same nodes that were dumped are added back in (no convergence) 
+
+Usually interpenetrating nodes won't be considered part of interface in next iteration
+
+\bibliography{biblio.bib}
+
+\end{document}

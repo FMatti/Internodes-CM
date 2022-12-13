@@ -1,6 +1,6 @@
-l = 0.15;  // Target mesh size 
-r = 0.75; // Radius of parabola at top
-h = 0.3;  // Maximum height of candidate nodes
+l = 0.1;  // Target mesh size 
+r = 0.5; // Radius of parabola at top
+h = 0.2;  // Maximum height of candidate nodes
 d = 0.05; // Penetration depth of parabola
 
 
@@ -9,8 +9,8 @@ d = 0.05; // Penetration depth of parabola
 // Nodes
 Point(1) = {-0.5, 0, 0, l};
 Point(2) = {0.5, 0, 0, l};
-Point(3) = {0.5, 1, 0, l};
-Point(4) = {-0.5, 1, 0, l};
+Point(3) = {0.5, 0.5, 0, l};
+Point(4) = {-0.5, 0.5, 0, l};
 
 // Lines
 Line(1) = {1, 2};
@@ -36,7 +36,7 @@ For i In {0:ny-1}
 
     // Generate new point on parabola
     x = i*dx - r;
-    y0 = 1 - d;
+    y0 = 0.5 - d;
     y = y0 + x*x;
 
     p = newp;

@@ -1,15 +1,21 @@
-l = 0.2;
-//+
-Point(1) = {0, 0, 0, l};
-Point(2) = {1, 0, 0, l};
-Point(3) = {1, 1, 0, l};
-Point(4) = {0, 1, 0, l};
-Point(5) = {0, 1.1, 0, l};
-Point(6) = {1, 1.1, 0, l};
-Point(7) = {1, 2, 0, l};
-Point(8) = {0, 2, 0, l};
-Point(9) = {0.5, 2.1, 0, l};
+SetFactory("OpenCASCADE");
+// Parameters
+// Mesh parameter at point
+lc=1.0;
+// Radius of the sphere
+R=0.5;
+// Length
+L=2;
+// Height
+H=2;
 
+
+
+Point(1) = {-L, 0, 0, lc};
+Point(2) = {L, 0, 0, lc};
+Point(3) = {L, H, 0, lc};
+Point(4) = {-L, H, 0, lc};
+Point(5) = {0, H+R, 0, lc};
 //+
 Line(1) = {1, 2};
 //+
@@ -19,42 +25,26 @@ Line(3) = {3, 4};
 //+
 Line(4) = {4, 1};
 //+
-Circle(5) = {5, 9, 6};
-//+
-Line(6) = {6, 7};
-//+
-Line(7) = {7, 8};
-//+
-Line(8) = {8, 5};
+Circle(5) = {-0, 2.5, 0, 0.5, 0, 2*Pi};
 //+
 Curve Loop(1) = {4, 1, 2, 3};
 //+
 Plane Surface(1) = {1};
 //+
-Curve Loop(2) = {8, 5, 6, 7};
+Curve Loop(2) = {5};
 //+
 Plane Surface(2) = {2};
 //+
-Physical Surface("body_lower") = {1};
+Physical Surface("lower_body", 6) = {1};
 //+
-Physical Surface("body_upper") = {2};
+Physical Surface("upper_body", 7) = {2};
 //+
-Physical Curve("lower_bottom") = {1};
+Physical Curve("bottom_edge_lower_body", 8) = {1};
 //+
-Physical Curve("lower_right") = {2};
+Physical Curve("right_edge_lower_body", 9) = {2};
 //+
-Physical Curve("lower_left") = {4};
+Physical Curve("top_edge_lower_body", 10) = {3};
 //+
-Physical Curve("lower_top") = {3};
+Physical Curve("left_edge_lower_body", 11) = {4};
 //+
-Physical Curve("upper_bottom") = {5};
-//+
-Physical Curve("upper_right") = {6};
-//+
-Physical Curve("upper_left") = {8};
-//+
-Physical Curve("upper_top") = {7};
-//+
-Physical Point("blocked_nodes") = {1};
-//+
-Field[1] = Box;
+Physical Curve("boundary_upper_body", 12) = {5};
