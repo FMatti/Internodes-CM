@@ -1,0 +1,16 @@
+\begin{algorithmic}[1]
+    \Require Positions of interpolation nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
+    \Require Radial basis function $\phi: \mathbb{R} \to \mathbb{R}_{\geq 0}$
+    \Require Constant $c \in (0, C)$
+    \State Compute distance matrix $\mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}$ defined in \refequ{equ:distance-matrix}
+    \State For each node $i$, compute minimal distance $d_i = \min_{j \neq i} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}(i, j)$
+    \While{$c \leq C$}
+        \State For each node $i$, let $r_i \gets d_i / c$
+        \State For each node $i$, count $n_i = \# \{j \neq i: \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}(i, j) < r_i \}$
+        \If{For all nodes $i$, $n_i < 1/\phi(c)$}
+            \State \textbf{break}
+        \EndIf
+        \State Increase $c$
+    \EndWhile
+    \State \textbf{return} Radius parameters $\{r_1, r_2, \dots \}$
+\end{algorithmic}

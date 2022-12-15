@@ -1,0 +1,14 @@
+\begin{algorithmic}[1]
+    \Require Positions of primary nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
+    \Require Positions of secondary nodes $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$
+    \Require Interface candidate index sets $\mathcal{I}^C$ and $\mathcal{J}^C$
+    \While{$\mathcal{I}^C$ or $\mathcal{J}^C$ were modified in the previous iteration}
+        \State Determine interface nodes $\mathcal{I}$ and $\mathcal{J}$ with radius parameters $r^{\boldsymbol{\xi}}_i, i \in \mathcal{I}$
+        and $r^{\boldsymbol{\zeta}}_j, j \in \mathcal{J}$  using \refalg{alg:nodesearch} on the candidate index sets $\mathcal{I}^C$ and $\mathcal{J}^C$
+        \State Assemble the matrix $\mathbf{A}$ and right-hand side $\mathbf{b}$ of \refequ{equ:linear-system}
+        \State Solve \refequ{equ:linear-system} to obtain displacements $\mathbf{u}$ and Lagarnge multipliers $\boldsymbol{\lambda}$
+        \State Update the interface candidate nodes $\mathcal{I}^C$ and $\mathcal{J}^C$ with
+        $\mathcal{I}$ and $\mathcal{J}$, respectively, where all nodes in tension
+        have been removed and all interpenetrating nodes have been added 
+    \EndWhile
+\end{algorithmic}

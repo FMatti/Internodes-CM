@@ -1,0 +1,39 @@
+\begin{tikzpicture}[scale=0.5]
+    \fill[darkblue!10!white] (0, 0) circle (2.9);
+    \fill[darkblue!30!white] (0, 0) circle (1.4);
+
+    \draw[darkblue, opacity=1] (-2, 1) to (0, 0) to (0.6, -1.1);
+    \draw[darkblue, path fading=west, opacity=1] (-3.9, 1.5) to (-2, 1);
+    \draw[darkblue, path fading=west, opacity=1] (-3.1, -0.5) to (-2, 1);
+    \draw[darkblue, path fading=south, opacity=1] (-1.6, -0.5) to (-2, 1);
+    \draw[darkblue, path fading=south, opacity=1] (0, 0) to (-1.4, -0.8);
+    \draw[darkblue, path fading=south, opacity=1] (0.6, -1.1) to (1, -2.5);
+    \draw[darkblue, path fading=west, opacity=1] (0.6, -1.1) to (-0.8, -1);
+    \draw[darkblue, path fading=west, opacity=1] (0.6, -1.1) to (-0.2, -2.4);
+
+    \draw[darkblue, opacity=1] (-0.5, 2) to (0.75, 0.45) to (2, -1);
+    \draw[darkblue, path fading=west, opacity=1] (-0.5, 2) to (-1.2, 3);
+    \draw[darkblue, path fading=north, opacity=1] (-0.5, 2) to (0, 3);
+    \draw[darkblue, path fading=east, opacity=1] (-0.5, 2) to (0.8, 1.9);
+    \draw[darkblue, path fading=north, opacity=1] (0.75, 0.45) to (0.9, 1.6);
+    \draw[darkblue, path fading=east, opacity=1] (0.75, 0.45) to (2, 0.5);
+    \draw[darkblue, path fading=north, opacity=1] (2, -1) to (2.1, 0.3);
+    \draw[darkblue, path fading=east, opacity=1] (2, -1) to (3, -1.75);
+    \draw[darkblue, path fading=east, opacity=1] (2, -1) to (3, -0.7);
+
+    \fill[darkblue] (0, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j}$};
+    \fill[darkblue] (-2, 1) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j+1}$};
+    %\fill[darkblue] (0.6, -1.1) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j-1}$};
+    \fill[white, draw=darkblue, thick] (0.75, 0.45) circle (0.08) node[anchor=south west, text=darkblue] {$\boldsymbol{\zeta}_{i}$};
+    \fill[white, draw=darkblue, thick] (-0.5, 2) circle (0.08) node[anchor=south west, text=darkblue] {$\boldsymbol{\zeta}_{i+1}$};
+    \fill[white, draw=darkblue, thick] (2, -1) circle (0.08) node[anchor=south west, text=darkblue] {$\boldsymbol{\zeta}_{i-1}$};
+
+    \fill[red] (0.6, -1.1, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j-1}$};
+    
+    %\fill[darkblue!30!white] (3, -3.5) circle (0.4);
+    %\fill[darkblue!10!white] (2, -3.5) circle (0.4);
+    %\draw[darkblue, thick, <->] (2.0, -3.5) to (2.4, -3.5);
+    %\draw[darkblue, thick, <->] (3.0, -3.5) to (3.4, -3.5);
+    %\node[darkblue] at (3, -3) {$cr_j$};
+    %\node[darkblue] at (2, -3) {$Cr_j$};
+\end{tikzpicture}

@@ -18,6 +18,103 @@
 
 \clearpage
 
+\section{The INTERNODES method for contact mechanics}
+\label{sec:internodes}
+
+\subsection{Radial basis interpolation}
+\label{subsec:rbf-interpolation}
+
+Interpolant of $g : \mathbb{R}^d \to \mathbb{R}$ at interpolation nodes $\boldsymbol{\xi}_1, \dots, \boldsymbol{\xi}_M$  with radius parameter $r$
+\begin{equation}
+    \Pi(\mathbf{x}) = \sum_{m=1}^M g_m \phi(\left\| \mathbf{x} - \boldsymbol{\xi}_m \right\|, r)
+\end{equation}
+
+\begin{figure}[ht]
+    \centering
+    \input{figures/radialbasis.tex}
+    \caption{Radial basis functions}\label{fig:radialbasis}
+\end{figure}
+
+Wendland $C^2$ radial basis function
+\begin{equation}
+    \phi(\delta) = (1 - \delta)_{+}^4(1 + 4\delta) 
+\end{equation}
+with $\delta = \left\| \mathbf{x} - \boldsymbol{\xi}_m \right\| / r$ are well suited.
+
+Denoting $\mathbf{g}_{\zeta} = (g(\boldsymbol{\zeta}_1), \dots, g(\boldsymbol{\zeta}_N))^T$ and $\mathbf{g}_{\xi} = (g(\boldsymbol{\xi}_1), \dots, g(\boldsymbol{\xi}_M))^T$ we can write
+\begin{equation}
+    \mathbf{g}_{\zeta} = \mathbf{D}_{NN}^{-1} \boldsymbol{\Phi}_{NM} \boldsymbol{\Phi}_{MM}^{-1} \mathbf{g}_{\xi}
+\end{equation}
+with the radial basis matrices
+\begin{align}
+    (\boldsymbol{\Phi}_{MM})_{ij} &= \phi(\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\|, r_j) \hspace{10px} i, j \in \{1, \dots, M\} \\
+    (\boldsymbol{\Phi}_{NM})_{ij} &= \phi(\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\|, r_j) \hspace{10px} i \in \{1, \dots, N\},~ j \in \{1, \dots, M\}
+\end{align}
+
+Deparis et. al. \cite{deparis} proposed two modifications:
+
+\begin{itemize}
+    \item Localized radius parameters for each node $r_{j}$, $j \in \{1, \dots, M\}$
+    \item Rescaling with $\mathbf{D}_{NN}^{-1}$ to obtain exact interpolation of constant functions
+\end{itemize}
+
+\subsection{Radius parameters}
+\label{subsec:radius-parameters}
+Conditions \cite{voet}:
+
+\begin{subequations}
+\begin{align}
+    \text{Limited number of supported interpolation nodes: } \notag \\
+    \forall i: \# \{j \neq i: \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| < r_i \} &< 1 / \phi(c) \label{equ:support-condition} \\
+    \text{Interpolation nodes not be too deep in another support: } \notag \\ 
+    \exists c \in (0, 1), \forall i \neq j:~\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| &\geq c r_j \label{equ:c-condition} \\
+    \text{All reference nodes in support of interpolation node: } \notag \\ 
+    \exists C \in (c, 1), \forall i, \exists j:~\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\| &\leq C r_j \label{equ:C-condition}
+\end{align}
+\label{equ:conditions}
+\end{subequations}
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{.32\linewidth}
+        \centering
+        \input{figures/radiusparameters1.tex}
+        \caption{Too small}\label{fig:radiusparameters1}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{figures/radiusparameters2.tex}
+        \caption{Too big}\label{fig:radiusparameters2}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \input{figures/radiusparameters3.tex}
+        \caption{Just right}\label{fig:radiusparameters3}
+    \end{subfigure}
+    \caption{Finding radius parameters}
+    \label{fig:radiusparameters}
+\end{figure}
+
+Distance matrix between nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
+and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ is defined as
+
+\begin{equation}
+    \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) =
+        \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\|
+    \label{equ:distance-matrix}
+\end{equation}
+
+\begin{algorithm}
+    \caption{Computation of radius parameters}
+    \input{algorithms/radiusparameters.tex}
+    \label{alg:radiusparameters}
+\end{algorithm}
+
+\begin{algorithm}
+    \caption{Search for interpolation nodes}
+    \input{algorithms/nodesearch.tex}
+    \label{alg:nodesearch}
+\end{algorithm}
+
+
 \begin{figure}[ht]
     \centering
     \begin{subfigure}[b]{\linewidth}
@@ -65,7 +162,71 @@
     \label{fig:example-iter2}
 \end{figure}
 
-\cite{deparis}
+\subsection{Strong form}
+\label{subsec:strong}
+
+The strong form of the problem is formulated for the displacement field $\mathbf{u}$:
+\begin{align}
+    \begin{cases}
+        - \text{div}(\boldsymbol{\sigma}(\mathbf{u})) = \mathbf{f} &\text{Differential equation (Cauchy stress tensor $\boldsymbol{\sigma}$)}\\
+        \mathbf{u} = \mathbf{g} &\text{Dirichlet boundary conditions (displacement field $\mathbf{g}$)}\\
+        \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} = \mathbf{t} &\text{Neumann boundary conditions (surface traction $\mathbf{t}$)}\\
+        \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} = \boldsymbol{\lambda} &\text{Lagrange multipliers $\boldsymbol{\lambda}$ defined along interface $\Gamma$}\\
+        \boldsymbol{\lambda} \cdot \mathbf{n} \leq 0 &\text{Hertz-Signorini-Moreau condition enforced along interface $\Gamma$}
+    \end{cases}
+\end{align}
+
+\subsection{Weak form}
+\label{subsec:weak}
+
+The weak formulation results in a linear system for the displacements $\mathbf{u}$ and Lagrange multipliers $\boldsymbol{\lambda}$ \cite{voet}:
+\begin{equation}
+\underbrace{
+\begin{bmatrix}
+    \mathbf{K}_{\Omega_1\Omega_1} & \mathbf{K}_{\Omega_1\Gamma_1} & \boldsymbol{0} & \boldsymbol{0} & \boldsymbol{0} \\
+    \mathbf{K}_{\Gamma_1\Omega_1} & \mathbf{K}_{\Gamma_1\Gamma_1} & \boldsymbol{0} & \boldsymbol{0} & - \mathbf{M}_{\Gamma_1} \\
+    \boldsymbol{0} & \boldsymbol{0} & \mathbf{K}_{\Omega_2\Omega_2} & \mathbf{K}_{\Omega_2\Gamma_2} & \boldsymbol{0} \\
+    \boldsymbol{0} & \boldsymbol{0} & \mathbf{K}_{\Gamma_2\Omega_2} & \mathbf{K}_{\Gamma_2\Gamma_2} & -\mathbf{M}_{\Gamma_2} \mathbf{R}_{\Gamma_2 \Gamma_1} \\
+    \boldsymbol{0} & \boldsymbol{I} & \boldsymbol{0} & -\mathbf{R}_{\Gamma_1 \Gamma_2} & \boldsymbol{0}   
+\end{bmatrix}
+}_{\mathbf{A}~\text{(INTERNODES matrix)}}
+\underbrace{
+\begin{bmatrix}
+    \mathbf{u}_{\Omega_1} \\
+    \mathbf{u}_{\Gamma_1} \\
+    \mathbf{u}_{\Omega_2} \\
+    \mathbf{u}_{\Gamma_2} \\
+    \boldsymbol{\lambda} \\
+\end{bmatrix}
+}_{\mathbf{x}}
+= 
+\underbrace{
+\begin{bmatrix}
+    \mathbf{f}_{\Omega_1} \\
+    \mathbf{f}_{\Gamma_1} \\
+    \mathbf{f}_{\Omega_2} \\
+    \mathbf{f}_{\Gamma_2} \\
+    \mathbf{d} \\
+\end{bmatrix}
+}_{\mathbf{b}}
+\label{equ:linear-system}
+\end{equation}
+\begin{align}
+    \mathbf{M} &:~ \text{Interface mass matrices} \\
+    \mathbf{K} &:~ \text{Stiffness matrices} \\
+    \mathbf{f} &:~ \text{Body force} \\
+    \mathbf{d} &:~ \text{Nodal gaps in configuration}
+\end{align}
+
+\subsection{Contact algorithm}
+\label{subsec:contact-algorithm}
+
+\begin{algorithm}
+    \caption{Contact algorithm for interrnodes method}
+    \input{algorithms/internodes.tex}
+    \label{alg:internodes}
+\end{algorithm}
+
 
 \section{Experiments}
 \label{sec:experiments}
@@ -82,8 +243,28 @@
      \input{plots/contact_radius_3d.pgf}
      \caption{Contact radius}
      \label{fig:contact-radius}
- \end{figure}
- 
+\end{figure}
+
+\section{Adjacent work}
+\label{sec:adjacent}
+
+\begin{figure}[ht]
+    \centering
+    \begin{subfigure}[b]{.49\linewidth}
+        \centering
+        \input{diagrams/resolution_initial.tex}
+        \caption{Initial class diagram of resolutions}\label{fig:resolution-initial}
+    \end{subfigure}
+    \begin{subfigure}[b]{.49\linewidth}
+        \centering
+        \input{diagrams/resolution_refactor.tex}
+        \caption{Refactored class diagram of resolutions}\label{fig:resolution-refactor}
+    \end{subfigure}
+    \caption{Combine linear and quadratic penalty resolution by templating the classes
+    with a penalty function.}
+    \label{fig:resolution}
+\end{figure}
+
 \section{Discussion}
 \label{sec:discussion}
 

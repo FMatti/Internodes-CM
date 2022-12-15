@@ -1,0 +1,9 @@
+\begin{tikzpicture}
+    \shade[inner color=darkblue, outer color=white] (0, 0) circle (0.8);
+    \fill[darkblue] (0, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j}$};
+    \shade[inner color=darkblue, outer color=white] (-2, 1) circle (0.8);
+    \fill[darkblue] (-2, 1) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j+1}$};
+    \shade[inner color=darkblue, outer color=white] (1.6, 2.1) circle (0.8);
+    \fill[darkblue] (1.6, 2.1) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j-1}$};
+    \draw[darkblue, <->] (0.1, 0) to node[midway, below] {$r$} (0.8, 0);
+\end{tikzpicture}
