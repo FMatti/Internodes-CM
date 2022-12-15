@@ -110,7 +110,7 @@ def wendland_rbf(distances, radiuses):
     """
     return wendland(distances / radiuses)
 
-def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5):
+def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5, C=0.95):
     """Iteratively compute radius parameters for radial basis functions until
     invertibility conditions are satisfied (increase 'c' in every iteration).
 
@@ -160,13 +160,13 @@ def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5):
 
         # If criterion was not satisfied, increase c and reiterate the procedure
         c = (c + 1) / 2
-        if c >= 1:
+        if c >= C:
             ValueError("Tried to increase c to", c, "which is larger than 1.")
 
     return rbf_radius_parameters
 
 def find_interpolation_nodes(
-    positions_primary, positions_secondary, rbf=wendland_rbf, C=0.95
+    positions_primary, positions_secondary, rbf=wendland_rbf, c=0.5, C=0.95
 ):
     """Find contact/interface nodes while trying to satisfy the constraints.
 
@@ -194,24 +194,26 @@ def find_interpolation_nodes(
     [1], Page 51, Section 2.3, Equation 2 and 3
     """
 
+    # TODO: Do this outside the loop
+    distance_matrix = sp.spatial.distance.cdist(
+        positions_primary,
+        positions_secondary,
+    )
+
     interface_primary_mask = np.ones(len(positions_primary), dtype=bool)
     interface_secondary_mask = np.ones(len(positions_secondary), dtype=bool)
-
     while True:
 
         # Determine the radial basis function radius parameters and to how
         # many opposite radial basis function supports each node belongs
         rbf_radius_parameters_primary = compute_rbf_radius_parameters(
-            positions_primary[interface_primary_mask], rbf=rbf
+            positions_primary[interface_primary_mask], rbf=rbf, c=c, C=C
         )
         rbf_radius_parameters_secondary = compute_rbf_radius_parameters(
-            positions_secondary[interface_secondary_mask], rbf=rbf
+            positions_secondary[interface_secondary_mask], rbf=rbf, c=c, C=C
         )
 
-        distance_matrix_MN = sp.spatial.distance.cdist(
-            positions_primary[interface_primary_mask],
-            positions_secondary[interface_secondary_mask],
-        )
+        distance_matrix_MN = distance_matrix[np.ix_(interface_primary_mask, interface_secondary_mask)]
 
         # Determine isolated nodes (i.e. nodes outside support of all opposite rbf)
         primary_mask = (
@@ -401,7 +403,7 @@ def find_penetration_nodes(
     normals_candidates_secondary,
     rbf=wendland_rbf,
     tolerance=0.9,
-    mesh_size=0.02,
+    mesh_size=0.05,
 ):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!

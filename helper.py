@@ -56,7 +56,8 @@ def plot_mesh(nodal_positions,
         plt.scatter(nodal_positions[nodes_dumped_secondary, 0], nodal_positions[nodes_dumped_secondary, 1], s=7, marker='x', color='#d55209')
 
     plt.axis('off')
-    plt.ylim([-0.5, 0.5])
+    plt.ylim([-0.2, 0.5])
+    plt.xlim([-0.75, 0])
     if savename is not None:
         plt.savefig(savename, bbox_inches='tight')
     plt.show()
