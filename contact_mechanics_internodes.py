@@ -409,7 +409,6 @@ def find_penetration_nodes(
     tolerance=0.9,
     mesh_size=0.1,
     rbf_radius_parameter=None
-
 ):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
@@ -569,8 +568,8 @@ class ContactMechanicsInternodes(object):
 
         # Objects for use in the solution process
         self.scaling_factor = E  # Young's modulus
-        self.external_force = external_force
-        self.nodal_displacements = nodal_displacements
+        self.external_force = external_force.copy()
+        self.nodal_displacements = nodal_displacements.copy()
         self.M = sp.sparse.csr_matrix(M)  # Mass matrix
         self.K = sp.sparse.csr_matrix(K)  # Stiffness matrix
 

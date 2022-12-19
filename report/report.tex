@@ -98,7 +98,7 @@ and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ is defined as
 
 \begin{equation}
     \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) =
-        \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\|
+        \left\| \boldsymbol{\xi}_i - \boldsymbol{\zeta}_j \right\|
     \label{equ:distance-matrix}
 \end{equation}
 
@@ -107,6 +107,14 @@ and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ is defined as
     \input{algorithms/radiusparameters.tex}
     \label{alg:radiusparameters}
 \end{algorithm}
+
+This algorithm has three main benefits over the previous implementation:
+
+\begin{itemize}
+    \item For uniform meshes (constant mesh size) all radial basis parameters will be the exact same
+    \item The computation of the distance matrix is done outside the \texttt{while}-loops
+    \item The algorithm will find interface nodes for a wider class of examples
+\end{itemize}
 
 \begin{algorithm}
     \caption{Search for interpolation nodes}
@@ -199,7 +207,7 @@ The weak formulation results in a linear system for the displacements $\mathbf{u
     \boldsymbol{\lambda} \\
 \end{bmatrix}
 }_{\mathbf{x}}
-= 
+=
 \underbrace{
 \begin{bmatrix}
     \mathbf{f}_{\Omega_1} \\

@@ -8,8 +8,8 @@
     \While{$\mathcal{I}$ or $\mathcal{J}$ were modified in the previous iteration}
         \State Obtain radial basis parameters $r^{\boldsymbol{\xi}}_i$, $i \in \mathcal{I}$ and
         $r^{\boldsymbol{\zeta}}_j$, $j \in \mathcal{J}$ using \refalg{alg:radiusparameters}
-        \State Remove all isolated nodes $i \in \mathcal{I}$, for which $\min_{j \in \mathcal{J}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) / r^{\boldsymbol{\zeta}}_j \geq C$
-        \State Remove all isolated nodes $j \in \mathcal{J}$, for which $\min_{i \in \mathcal{I}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) / r^{\boldsymbol{\xi}}_i \geq C$
+        \State Remove isolated nodes $i \in \mathcal{I}$ with $\min_{j \in \mathcal{J}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\zeta}}_j$ \Comment{Condition \refequ{equ:C-condition}}
+        \State Remove isolated nodes $j \in \mathcal{J}$ with $\min_{i \in \mathcal{I}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\xi}}_i$ \Comment{Condition \refequ{equ:C-condition}}
     \EndWhile
     \State \textbf{return} Sets of active nodes $\mathcal{I}$ and $\mathcal{J}$ with radius parameters $r^{\boldsymbol{\xi}}_i, i \in \mathcal{I}$ and $r^{\boldsymbol{\zeta}}_j, j \in \mathcal{J}$
 \end{algorithmic}

@@ -37,7 +37,7 @@ def _check_rbf_radius_conditions(positions, rbf_radius_parameters, c_min=0.05, c
         if condition_1 and condition_2:
             return
 
-    raise RuntimeError
+    assert False, "No 'c' was found which satisfies radius parameter conditions"
 
 def _check_node_contained_in_support(positions, positions_ref, rbf_radius_parameters, C_max=0.99):
     # Check condition: [1], Page 51, Section 2.3, Equation 3
