@@ -166,7 +166,7 @@ def compute_rbf_radius_parameters(positions, rbf=wendland_rbf, c=0.5, C=0.95):
     return rbf_radius_parameters
 
 def find_interpolation_nodes(
-    positions_primary, positions_secondary, rbf=wendland_rbf, c=0.5, C=0.95
+    positions_primary, positions_secondary, rbf=wendland_rbf, c=0.5, C=0.95, rbf_radius_parameter=None
 ):
     """Find contact/interface nodes while trying to satisfy the constraints.
 
@@ -194,7 +194,6 @@ def find_interpolation_nodes(
     [1], Page 51, Section 2.3, Equation 2 and 3
     """
 
-    # TODO: Do this outside the loop
     distance_matrix = sp.spatial.distance.cdist(
         positions_primary,
         positions_secondary,
@@ -204,14 +203,19 @@ def find_interpolation_nodes(
     interface_secondary_mask = np.ones(len(positions_secondary), dtype=bool)
     while True:
 
-        # Determine the radial basis function radius parameters and to how
-        # many opposite radial basis function supports each node belongs
-        rbf_radius_parameters_primary = compute_rbf_radius_parameters(
-            positions_primary[interface_primary_mask], rbf=rbf, c=c, C=C
-        )
-        rbf_radius_parameters_secondary = compute_rbf_radius_parameters(
-            positions_secondary[interface_secondary_mask], rbf=rbf, c=c, C=C
-        )
+        if rbf_radius_parameter is None:
+            # Determine the radial basis function radius parameters and to how
+            # many opposite radial basis function supports each node belongs
+            rbf_radius_parameters_primary = compute_rbf_radius_parameters(
+                positions_primary[interface_primary_mask], rbf=rbf, c=c, C=C
+            )
+            rbf_radius_parameters_secondary = compute_rbf_radius_parameters(
+                positions_secondary[interface_secondary_mask], rbf=rbf, c=c, C=C
+            )
+        else:
+            rbf_radius_parameters_primary = rbf_radius_parameter*np.ones(interface_primary_mask.sum())
+            rbf_radius_parameters_secondary = rbf_radius_parameter*np.ones(interface_secondary_mask.sum())
+
 
         distance_matrix_MN = distance_matrix[np.ix_(interface_primary_mask, interface_secondary_mask)]
 
@@ -403,7 +407,9 @@ def find_penetration_nodes(
     normals_candidates_secondary,
     rbf=wendland_rbf,
     tolerance=0.9,
-    mesh_size=0.05,
+    mesh_size=0.1,
+    rbf_radius_parameter=None
+
 ):
     """Find the nodes on secondary and primary interface that penetrate.
     TODO: Require reference and make mesh size configurable!!
@@ -435,7 +441,7 @@ def find_penetration_nodes(
         rbf_radius_parameters_secondary,
         nodes_interface_primary_mask,
         nodes_interface_secondary_mask,
-    ) = find_interpolation_nodes(positions_primary, positions_secondary)
+    ) = find_interpolation_nodes(positions_primary, positions_secondary, rbf_radius_parameter=rbf_radius_parameter)
 
     # Update positions of primary and secondary nodes along interface
     positions_interface_primary = positions_primary[nodes_interface_primary_mask]
@@ -500,6 +506,8 @@ class ContactMechanicsInternodes(object):
         K,
         E,
         rbf=wendland_rbf,
+        rbf_radius_parameter=None,
+        security_factor=None
     ):
         self.dim = dim
 
@@ -540,6 +548,22 @@ class ContactMechanicsInternodes(object):
 
         # Radial basis function and the corresponding radius parameters
         self.rbf = rbf
+        if security_factor is not None:
+            distance_matrix_MM = sp.spatial.distance.cdist(
+                self.nodal_positions[self.nodes_candidate_primary],
+                self.nodal_positions[self.nodes_candidate_primary],
+            )
+            np.fill_diagonal(distance_matrix_MM, np.inf)
+            min_mesh_size_MM = np.min(distance_matrix_MM)
+            distance_matrix_NN = sp.spatial.distance.cdist(
+                self.nodal_positions[self.nodes_candidate_secondary],
+                self.nodal_positions[self.nodes_candidate_secondary],
+            )
+            np.fill_diagonal(distance_matrix_NN, np.inf)
+            min_mesh_size_NN = np.min(distance_matrix_NN)
+            rbf_radius_parameter = security_factor*min(min_mesh_size_MM, min_mesh_size_NN)
+        
+        self.rbf_radius_parameter = rbf_radius_parameter
         self.rbf_radius_parameters_primary = None
         self.rbf_radius_parameters_secondary = None
 
@@ -687,6 +711,7 @@ class ContactMechanicsInternodes(object):
             self.positions_interface_primary,
             self.positions_interface_secondary,
             rbf=wendland_rbf,
+            rbf_radius_parameter=self.rbf_radius_parameter
         )
 
         # Update current radius parameters of radial basis functions
@@ -823,6 +848,7 @@ class ContactMechanicsInternodes(object):
             positions_candidate_secondary,
             normals_candidate_primary,
             normals_candidate_secondary,
+            rbf_radius_parameter=self.rbf_radius_parameter
         )
         nodes_to_add_primary = self.nodes_candidate_primary[
             np.logical_and(nodes_penetration_primary, ~nodes_interface_primary_mask)
