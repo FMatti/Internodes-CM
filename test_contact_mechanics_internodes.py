@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import scipy as sp
 import matplotlib.tri as tri
+import akantu as aka
 
 from helper import get_theoretical_normal_displacement, get_theoretical_contact_radius
 from contact_mechanics_internodes import *
@@ -219,6 +220,158 @@ def test_compute_normals_parabolic():
 
         np.testing.assert_allclose(normals_ex[inner_nodes], normals[inner_nodes], atol=2e-2)
 
+def test_contact2d_plane_circle():
+
+    # Set up contact problem
+    mesh_file = 'mesh/contact2d_plane_circle.msh'
+    material_file = 'material/material.dat'
+    spatial_dimension = 2
+    aka.parseInput(material_file)
+
+    mesh = aka.Mesh(spatial_dimension)
+    mesh.read(mesh_file)
+
+    model = aka.SolidMechanicsModel(mesh)
+    model.initFull(_analysis_method=aka._implicit_dynamic)
+
+    # Apply boundary conditions
+    model.applyBC(aka.FixedValue(0., aka._x), 'primary_fixed')
+    model.applyBC(aka.FixedValue(0., aka._y), 'primary_fixed')
+    model.applyBC(aka.FixedValue(0., aka._x), 'secondary_fixed')
+
+    # Get positions of all nodes, surface connectivity and candidate nodes
+    nodal_positions = mesh.getNodes()
+    surface_connectivity = mesh.getConnectivity(aka._segment_2)
+    nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
+    nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
+    external_force = model.getExternalForce()
+    nodal_displacements = model.getDisplacement()
+    nodes_blocked = model.getBlockedDOFs()
+
+    model.assembleMass()
+    M = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('M')).toarray()
+
+    model.assembleStiffnessMatrix()
+    K = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('K')).toarray()
+
+    E = model.getMaterial(0).getReal("E")
+    nu = model.getMaterial(0).getReal("nu")
+
+    d0 = 0.05
+    R = 0.5
+
+    # Run internodes algorithm
+    d_list = np.linspace(0.05, 0.2, 4)
+    a_list = np.empty_like(d_list)
+    u_list = np.empty_like(d_list)
+
+    for j, d in enumerate(d_list):
+
+        model.applyBC(aka.FixedValue(-d+d0, aka._y), 'secondary_fixed')
+        nodal_displacements = model.getDisplacement()
+
+        internodes_model = ContactMechanicsInternodes(spatial_dimension, nodal_positions, nodal_displacements, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary, nodes_blocked, external_force, M, K, E)
+
+        max_iter = 10
+        for i in range(max_iter):
+            # Find the interface nodes
+            internodes_model.define_interface()
+
+            # Assemble model
+            internodes_model.assemble_full_model()
+
+            # Solve model
+            displacements, lambdas = internodes_model.solve_direct()
+
+            # Update the interface nodes and check if it converged
+            converged = internodes_model.update_interface(displacements, lambdas)
+
+            if converged:
+                break
+
+        assert i+1 < max_iter
+
+        positions = internodes_model.nodal_positions + displacements
+        positions_interface_secondary = positions[internodes_model.nodes_interface_secondary]
+
+        a_list[j] = np.max(sp.spatial.distance.cdist(positions_interface_secondary, positions_interface_secondary))/2
+        u_list[j] = np.min(positions_interface_secondary[:, 1])
+
+    # Check if normal displacement corresponds to theoretical expectation
+    np.testing.assert_allclose(get_theoretical_normal_displacement(R, d_list, E, nu), u_list, atol=1e-2)
+
+    # Check if contact radius corresponds to theoretical expectation
+    np.testing.assert_allclose(get_theoretical_contact_radius(R, d_list), a_list, atol=5e-2)
+
+def test_contact2d_circle_circle():
+
+    # Set up contact problem
+    mesh_file = 'mesh/contact2d_circle_circle.msh'
+    material_file = 'material/material.dat'
+    spatial_dimension = 2
+    aka.parseInput(material_file)
+
+    mesh = aka.Mesh(spatial_dimension)
+    mesh.read(mesh_file)
+
+    model = aka.SolidMechanicsModel(mesh)
+    model.initFull(_analysis_method=aka._implicit_dynamic)
+
+    # Apply boundary conditions
+    model.applyBC(aka.FixedValue(0., aka._x), 'primary_fixed')
+    model.applyBC(aka.FixedValue(0.025, aka._y), 'primary_fixed')
+    model.applyBC(aka.FixedValue(0., aka._x), 'secondary_fixed')
+    model.applyBC(aka.FixedValue(-0.025, aka._y), 'secondary_fixed')
+
+    # Get positions of all nodes, surface connectivity and candidate nodes
+    nodal_positions = mesh.getNodes()
+    surface_connectivity = mesh.getConnectivity(aka._segment_2)
+    nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
+    nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
+    external_force = model.getExternalForce()
+    nodal_displacements = model.getDisplacement()
+    nodes_blocked = model.getBlockedDOFs()
+
+    model.assembleMass()
+    M = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('M')).toarray()
+
+    model.assembleStiffnessMatrix()
+    K = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('K')).toarray()
+
+    E = model.getMaterial(0).getReal("E")
+
+    # Run internodes algorithm
+    internodes_model = ContactMechanicsInternodes(spatial_dimension, nodal_positions, nodal_displacements, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary, nodes_blocked, external_force, M, K, E)
+
+    max_iter = 10
+    for i in range(max_iter):
+        # Find the interface nodes
+        internodes_model.define_interface()
+
+        # Assemble model
+        internodes_model.assemble_full_model()
+
+        # Solve model
+        displacements, lambdas = internodes_model.solve_direct()
+
+        # Update the interface nodes and check if it converged
+        converged = internodes_model.update_interface(displacements, lambdas)
+
+        if converged:
+            break
+
+    assert i+1 < max_iter
+
+    positions = internodes_model.nodal_positions + displacements
+    positions_interface_primary = positions[internodes_model.nodes_interface_primary]
+    positions_interface_secondary = positions[internodes_model.nodes_interface_secondary]
+
+    # Check if normal displacement corresponds to theoretical expectation
+    np.testing.assert_allclose(positions_interface_primary[:, 1], np.zeros(len(positions_interface_primary)), atol=1e-2)
+
+    # Check if contact radius corresponds to theoretical expectation
+    np.testing.assert_allclose(positions_interface_secondary[:, 1], np.zeros(len(positions_interface_secondary)), atol=1e-2)
+
 def test_contact3d_plane_sphere():
 
     # Set up contact problem
@@ -304,92 +457,8 @@ def test_contact3d_plane_sphere():
     # Check if contact radius corresponds to theoretical expectation
     np.testing.assert_allclose(get_theoretical_contact_radius(R, d_list), a_list, atol=5e-2)
 
-def test_contact2d_plane_circle():
+def test_contact3d_sphere_sphere():
 
-    # Set up contact problem
-    mesh_file = 'mesh/contact2d_plane_circle.msh'
-    material_file = 'material/material.dat'
-    spatial_dimension = 2
-    aka.parseInput(material_file)
-
-    mesh = aka.Mesh(spatial_dimension)
-    mesh.read(mesh_file)
-
-    model = aka.SolidMechanicsModel(mesh)
-    model.initFull(_analysis_method=aka._implicit_dynamic)
-
-    # Apply boundary conditions
-    model.applyBC(aka.FixedValue(0., aka._x), 'primary_fixed')
-    model.applyBC(aka.FixedValue(0., aka._y), 'primary_fixed')
-    model.applyBC(aka.FixedValue(0., aka._x), 'secondary_fixed')
-
-    # Get positions of all nodes, surface connectivity and candidate nodes
-    nodal_positions = mesh.getNodes()
-    surface_connectivity = mesh.getConnectivity(aka._segment_2)
-    nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
-    nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
-    external_force = model.getExternalForce()
-    nodal_displacements = model.getDisplacement()
-    nodes_blocked = model.getBlockedDOFs()
-
-    model.assembleMass()
-    M = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('M')).toarray()
-
-    model.assembleStiffnessMatrix()
-    K = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('K')).toarray()
-
-    E = model.getMaterial(0).getReal("E")
-    nu = model.getMaterial(0).getReal("nu")
-
-    d0 = 0.05
-    R = 0.5
-
-    # Run internodes algorithm
-    d_list = np.linspace(0.05, 0.2, 4)
-    a_list = np.empty_like(d_list)
-    u_list = np.empty_like(d_list)
-
-    for j, d in enumerate(d_list):
-
-        model.applyBC(aka.FixedValue(-d+d0, aka._y), 'secondary_fixed')
-        nodal_displacements = model.getDisplacement()
-
-        internodes_model = ContactMechanicsInternodes(spatial_dimension, nodal_positions, nodal_displacements, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary, nodes_blocked, external_force, M, K, E)
-
-        max_iter = 10
-        for i in range(max_iter):
-            # Find the interface nodes
-            internodes_model.define_interface()
-
-            # Assemble model
-            internodes_model.assemble_full_model()
-
-            # Solve model
-            displacements, lambdas = internodes_model.solve_direct()
-
-            # Update the interface nodes and check if it converged
-            converged = internodes_model.update_interface(displacements, lambdas)
-
-            if converged:
-                break
-
-        assert i+1 < max_iter
-
-        positions = internodes_model.nodal_positions + displacements
-        positions_interface_secondary = positions[internodes_model.nodes_interface_secondary]
-
-        a_list[j] = np.max(sp.spatial.distance.cdist(positions_interface_secondary, positions_interface_secondary))/2
-        u_list[j] = np.min(positions_interface_secondary[:, 1])
-
-    # Check if normal displacement corresponds to theoretical expectation
-    np.testing.assert_allclose(get_theoretical_normal_displacement(R, d_list, E, nu), u_list, atol=1e-2)
-
-    # Check if contact radius corresponds to theoretical expectation
-    np.testing.assert_allclose(get_theoretical_contact_radius(R, d_list), a_list, atol=5e-2)
-
-def test_contact3d_plane_sphere():
-
-    
     # Set up contact problem
     mesh_file = 'mesh/contact3d_sphere_sphere.msh'
     material_file = 'material/material.dat'
@@ -413,75 +482,6 @@ def test_contact3d_plane_sphere():
     # Get positions of all nodes, surface connectivity and candidate nodes
     nodal_positions = mesh.getNodes()
     surface_connectivity = mesh.getConnectivity(aka._triangle_3)
-    nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
-    nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
-    external_force = model.getExternalForce()
-    nodal_displacements = model.getDisplacement()
-    nodes_blocked = model.getBlockedDOFs()
-
-    model.assembleMass()
-    M = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('M')).toarray()
-
-    model.assembleStiffnessMatrix()
-    K = aka.AkantuSparseMatrix(model.getDOFManager().getMatrix('K')).toarray()
-
-    E = model.getMaterial(0).getReal("E")
-
-    # Run internodes algorithm
-    internodes_model = ContactMechanicsInternodes(spatial_dimension, nodal_positions, nodal_displacements, surface_connectivity, nodes_candidate_primary, nodes_candidate_secondary, nodes_blocked, external_force, M, K, E)
-
-    max_iter = 10
-    for i in range(max_iter):
-        # Find the interface nodes
-        internodes_model.define_interface()
-
-        # Assemble model
-        internodes_model.assemble_full_model()
-
-        # Solve model
-        displacements, lambdas = internodes_model.solve_direct()
-
-        # Update the interface nodes and check if it converged
-        converged = internodes_model.update_interface(displacements, lambdas)
-
-        if converged:
-            break
-
-    assert i+1 < max_iter
-
-    positions = internodes_model.nodal_positions + displacements
-    positions_interface_primary = positions[internodes_model.nodes_interface_primary]
-    positions_interface_secondary = positions[internodes_model.nodes_interface_secondary]
-
-    # Check if normal displacement corresponds to theoretical expectation
-    np.testing.assert_allclose(positions_interface_primary[:, 1], np.zeros(len(positions_interface_primary)), atol=1e-2)
-
-    # Check if contact radius corresponds to theoretical expectation
-    np.testing.assert_allclose(positions_interface_secondary[:, 1], np.zeros(len(positions_interface_secondary)), atol=1e-2)
-
-def test_contact2d_circle_circle():
-
-    # Set up contact problem
-    mesh_file = 'mesh/contact2d_circle_circle.msh'
-    material_file = 'material/material.dat'
-    spatial_dimension = 2
-    aka.parseInput(material_file)
-
-    mesh = aka.Mesh(spatial_dimension)
-    mesh.read(mesh_file)
-
-    model = aka.SolidMechanicsModel(mesh)
-    model.initFull(_analysis_method=aka._implicit_dynamic)
-
-    # Apply boundary conditions
-    model.applyBC(aka.FixedValue(0., aka._x), 'primary_fixed')
-    model.applyBC(aka.FixedValue(0.025, aka._y), 'primary_fixed')
-    model.applyBC(aka.FixedValue(0., aka._x), 'secondary_fixed')
-    model.applyBC(aka.FixedValue(-0.025, aka._y), 'secondary_fixed')
-
-    # Get positions of all nodes, surface connectivity and candidate nodes
-    nodal_positions = mesh.getNodes()
-    surface_connectivity = mesh.getConnectivity(aka._segment_2)
     nodes_candidate_primary = mesh.getElementGroup('primary_candidates').getNodeGroup().getNodes().ravel()
     nodes_candidate_secondary = mesh.getElementGroup('secondary_candidates').getNodeGroup().getNodes().ravel()
     external_force = model.getExternalForce()
