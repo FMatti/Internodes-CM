@@ -2,6 +2,10 @@
 
 Implementation of the internodes method for two- and three-dimensional problems in contact mechanics.
 
+## Info
+
+This code served as a prototype for the inclusion of the method in [Akantu](https://gitlab.com/akantu/akantu/-/tree/features/40-contact-using-the-internodes-method) in collaboration with [@Technici4n](https://github.com/Technici4n).
+
 ## Instructions
 
 Clone the repository
