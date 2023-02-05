@@ -1,0 +1,11 @@
+\begin{tikzpicture}
+    \draw[ultra thick, darkblue, fill=darkblue!10!white] (-5, -3) to (5, -3) to (5, 0) to (3, 0) to[out=180,in=0] (0, -0.75) to[out=180,in=0] (-3, 0) to  (-5, 0) -- cycle;
+    \draw[ultra thick, darkblue, fill=darkblue!10!white] (3, 2.25) arc(360:180:3) -- cycle;
+    \draw[ultra thick, darkblue, dashed] (3, 3) arc(360:180:3) -- cycle;
+    \draw[ultra thick, darkblue, dashed] (3, 0) -- (-3, 0);
+    \draw[<->, thick] (3.25, 3) -- (3.25, 2.25) node[midway, right] {$d$};
+    \draw[->, thick] (0, 3.75) -- (0, 3.25) node[midway, right] {$F$};
+    \draw[<->, thick] (0, -0.9) -- (1.65, -0.9) node[midway, below] {$a$};
+    \draw[<->, thick] (0, 2.4) -- (2.9, 2.4) node[midway, above] {$R$};
+    \draw[<->, thick] (0, 0) -- (0, -0.75) node[midway, right] {$u_z$};
+\end{tikzpicture}

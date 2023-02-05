@@ -1,0 +1,25 @@
+\begin{tikzpicture}
+    \only<2>{\fill[darkblue!10!white] (0, 0) circle (0.75)};
+    \only<2>{\fill[darkblue!30!white] (0, 0) circle (0.35)};
+    \only<3>{\fill[darkblue!10!white] (0, 0) circle (2.9)};
+    \only<3>{\fill[darkblue!30!white] (0, 0) circle (1.4)};
+    \only<4>{\fill[darkblue!10!white] (0, 0) circle (1.7)};
+    \only<4>{\fill[darkblue!30!white] (0, 0) circle (0.8)};
+
+    \fill[darkblue] (0, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j}$};
+    \fill[darkblue] (-2, 1, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j+1}$};
+    \fill[darkblue] (0.6, -1.1, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j-1}$};
+    \draw[darkblue, ultra thick] (0.75, 0.45) circle (0.08) node[anchor=south west] {$\boldsymbol{\zeta}_{i}$};
+    \draw[darkblue, ultra thick] (-0.5, 2) circle (0.08) node[anchor=south west] {$\boldsymbol{\zeta}_{i+1}$};
+    \draw[darkblue, ultra thick] (2, -1) circle (0.08) node[anchor=south west] {$\boldsymbol{\zeta}_{i-1}$};
+
+    \only<2>{\draw[red, ultra thick] (0.75, 0.45) circle (0.08) node[anchor=south west] {$\boldsymbol{\zeta}_{i}$};}
+    \only<3>{\fill[red] (0.6, -1.1, 0) circle (0.1) node[anchor=north east] {$\boldsymbol{\xi}_{j-1}$};}
+    
+    \fill[darkblue!30!white] (3, -3.5) circle (0.4);
+    \fill[darkblue!10!white] (2, -3.5) circle (0.4);
+    \draw[darkblue, thick, <->] (2.0, -3.5) to (2.4, -3.5);
+    \draw[darkblue, thick, <->] (3.0, -3.5) to (3.4, -3.5);
+    \node[darkblue] at (3, -3) {$cr_j$};
+    \node[darkblue] at (2, -3) {$Cr_j$};
+\end{tikzpicture}

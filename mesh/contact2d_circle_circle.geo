@@ -5,7 +5,7 @@ r2 = 0.5; // Radius of the secondary circle
 d = 0.05; // Initial penetration overlap of circles
 
 a = 0.4; // Maximum expected radius of contact area
-n = 20; // Number of mesh refinements for candidates
+n = 30; // Number of mesh refinements for candidates
 
 
 // ---> PRIMARY

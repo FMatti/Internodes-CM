@@ -1,0 +1,17 @@
+\begin{tikzpicture}
+    \fill[ultra thick, darkblue!10!white] (-1.5, -3) rectangle (1.5, 0);
+    \fill[ultra thick, darkblue!10!white] (-1.5, 0.25) to (-1.5, 3.25) to (1.5, 3.25) to (1.5, 0.25) to [out=200, in=-20] (-1.5, 0.25);
+    \draw[ultra thick, darkblue] (-1.5, -3) rectangle (1.5, 0);
+    \draw[ultra thick, darkblue] (-1.5, 0.25) to (-1.5, 3.25) to (1.5, 3.25) to (1.5, 0.25) to [out=200, in=-20] (-1.5, 0.25);
+    \node[darkblue] at (0, 1.5) {$\Omega_1$};
+    \node[darkblue] at (0, -1.5) {$\Omega_2$};
+    \draw[ultra thick, darkblue, <-] (0.0, 3.25) to (0.0, 3.75);
+    \draw[ultra thick, darkblue, <-] (1.0, 3.25) to (1.0, 3.75) node[right] {$\mathbf{f}$};
+    \draw[ultra thick, darkblue, <-] (-1.0, 3.25) to (-1.0, 3.75);
+    \onslide<2->{
+        \draw[ultra thick, red] (0.75, 0.0) to [out=190, in=-10] (-0.75, 0.0);
+        \draw[ultra thick, red] (0.75, 0.0) to (-0.75, 0.0);
+        \draw[thick, red, <-] (0, 0.05) to (0.3, 0.5) node[above] {$\Gamma_2$};
+        \draw[thick, red, <-] (0, -0.15) to (0.3, -0.5) node[below] {$\Gamma_1$};
+    }
+\end{tikzpicture}

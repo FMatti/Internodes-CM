@@ -1,0 +1,18 @@
+$ (*@  \textbf{\textcolor{mainblue}{gdb python}}  @*)
+Reading symbols from python...
+Reading symbols from /usr/lib/debug/.build-id/53/d7bffd6d10967f934c73627bd679a8ae9f62db.debug...
+(gdb) (*@  \textbf{\textcolor{mainblue}{b findContactNodes}}  @*)
+Function "findContactNodes" not defined.
+Make breakpoint pending on future shared library load? (y or [n]) (*@  \textbf{\textcolor{mainblue}{y}}  @*)
+Breakpoint 1 (findContactNodes) pending.
+(gdb) (*@  \textbf{\textcolor{mainblue}{r test\_contact2d\_circle.py}}  @*)
+...
+Thread 1 "python" hit Breakpoint 1, 0x00007fffbd83cdf0 in akantu::ContactDetectorInternodes
+::findContactNodes(akantu::NodeGroup&, akantu::NodeGroup&)@plt () from /home/bp/akantu/build/src/libakantu.so
+(gdb) (*@  \textbf{\textcolor{mainblue}{next}}  @*)
+Thread 1 "python" hit Breakpoint 1, akantu::ContactDetectorInternodes
+::findContactNodes (this=0x154e5f0, master_node_group=..., slave_node_group=...)
+    at /home/bp/akantu/src/model/contact_mechanics_internodes/contact_detector_internodes.cc:105
+105     void ContactDetectorInternodes::findContactNodes(NodeGroup & master_node_group,
+                                                         NodeGroup & slave_node_group) {
+(gdb)

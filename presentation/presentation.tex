@@ -1,0 +1,375 @@
+\documentclass[aspectratio=169, xcolor={svgnames}]{beamer}
+\title{INTERNODES in contact mechanics}
+\date{\today}
+\author{Bruno Ploumhans \& Fabio Matti}
+
+\usepackage{beamertheme}
+\usepackage{listings}
+\usepackage{tikz}
+\usepackage{pdfpages}
+\usepackage{pgfplots}
+\pgfplotsset{compat=newest}
+
+%% Nice looking inline code (`ci` stands for code inline)
+% Thanks to Stack Overflow
+% https://tex.stackexchange.com/questions/140166/making-inline-code-printing-pretty
+\newcommand{\ci}[1]{%
+  \tikz[baseline=(s.base)]{
+    \node(s)[rounded corners,fill=orange!20,draw=gray]{\texttt{#1}};
+  }%
+}
+
+\lstset{
+  basicstyle=\footnotesize,        % the size of the fonts that are used for the code
+}
+
+\begin{document}
+
+\begin{frame}[noframenumbering]
+
+    \titlepage
+
+\end{frame}
+
+\begin{frame}{Outline}
+    \begin{itemize}
+        \item Recap of INTERNODES method
+        \item Test cases and results
+        \item Implementation discussion
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Contact mechanics problems}
+\centering
+    \input{figures/sketch_plane_sphere.tex}
+\end{frame}
+
+\begin{frame}{Radial basis interpolation}
+\begin{columns}
+\begin{column}{0.5\textwidth}
+    \onslide<1->{\flushleft
+    Radial basis interpolant of $g : \mathbb{R}^d \to \mathbb{R}$:
+    \begin{equation}
+        \Pi(\mathbf{x}) = \sum_{m=1}^M g(\boldsymbol{\xi}_m) \phi(\left\| \mathbf{x} -  \boldsymbol{\xi}_m \right\|, r_m)
+    \end{equation}
+    \begin{itemize}
+        \item Radial basis function $\phi$
+        \item Interpolation nodes $\boldsymbol{\xi}_1, \dots, \boldsymbol{\xi}_M$
+        \item Radius parameters $r_1, \dots, r_M$
+    \end{itemize}
+    }
+    \onslide<2->{\flushleft
+    Wendland $C^2$ radial basis function
+    \begin{equation*}
+        \phi(\delta) = (1 - \delta)_{+}^4(1 + 4\delta) 
+    \end{equation*}
+    with $\delta = \lVert \mathbf{x} - \boldsymbol{\xi}_m \rVert / r$ are well suited
+    }
+\end{column}
+\begin{column}{0.5\textwidth}
+    \centering
+    \scalebox{0.9}{\input{figures/radialbasis.tex}}
+    \onslide<2->{\input{figures/plot.pgf}}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Conditions}
+\begin{block}{Conditions on radius parameters}
+There exist $c \in (0, 1)$ and $C \in (c, 1)$ such that
+\begin{align}
+    \forall i: \# \{j \neq i: \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| < r_i \} &< 1 / \phi(c) \label{con:support-condition}  \tag{Condition 1} \\
+    \forall i \neq j:~\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| &\geq c r_j \label{con:c-condition}  \tag{Condition 2}  \\
+    \forall i, \exists j:~\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\| &\leq C r_j \label{con:C-condition}  \tag{Condition 3} 
+\end{align}
+\end{block}
+\centering
+\input{figures/radiusparameters2.tex}
+\input{figures/radiusparameters1.tex} 
+\input{figures/radiusparameters3.tex} 
+\end{frame}
+
+\begin{frame}{Radial basis interpolation}
+    \onslide<1->{\flushleft
+Denoting $\mathbf{g}_{\zeta} = (g(\boldsymbol{\zeta}_1), \dots, g(\boldsymbol{\zeta}_N))^T$ and $\mathbf{g}_{\xi} = (g(\boldsymbol{\xi}_1), \dots, g(\boldsymbol{\xi}_M))^T$ we can write
+    \begin{equation*}
+         \mathbf{g}_{\zeta} = \underbrace{\mathbf{D}_{NN}^{-1} \boldsymbol{\Phi}_{NM} \boldsymbol{\Phi}_{MM}^{-1}}_{\mathbf{R}_{NM}} \mathbf{g}_{\xi}
+    \end{equation*}
+    with rescaling $\mathbf{D}_{NN}^{-1}$ to obtain exact interpolation of constant functions and the radial basis matrices
+    \begin{align*}
+        (\boldsymbol{\Phi}_{MM})_{ij} &= \phi(\lVert \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \rVert, r_j) \hspace{10px} i, j \in \{1, \dots, M\} \\
+        (\boldsymbol{\Phi}_{NM})_{ij} &= \phi(\lVert \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \rVert, r_j) \hspace{10px} i \in \{1, \dots, N\},~ j \in \{1, \dots, M\}
+    \end{align*}
+    }
+\end{frame}
+
+\begin{frame}{The INTERNODES system of equations}
+    Two bodies $\Omega_1$ and $\Omega_2$ with interfaces $\Gamma_1$ and $\Gamma_2$.
+    \begin{equation}
+    \underbrace{
+    \begin{bmatrix}
+    \setlength\arrayrulewidth{.1pt}
+    \begin{array}{cc|cc|c}
+        \mathbf{K}_{\Omega_1\Omega_1} & \mathbf{K}_{\Omega_1\Gamma_1} & & &  \\
+        \mathbf{K}_{\Gamma_1\Omega_1} & \mathbf{K}_{\Gamma_1\Gamma_1} & &  & - \mathbf{M}_{\Gamma_1} \\ \hline
+         & & \mathbf{K}_{\Omega_2\Omega_2} & \mathbf{K}_{\Omega_2\Gamma_2} &  \\
+         & & \mathbf{K}_{\Gamma_2\Omega_2} & \mathbf{K}_{\Gamma_2\Gamma_2} & -\mathbf{M}_{\Gamma_2} \mathbf{R}_{\Gamma_2 \Gamma_1} \\ \hline
+         & & & -\mathbf{R}_{\Gamma_1 \Gamma_2} & 
+    \end{array}
+    \end{bmatrix}
+    }_{=\mathbf{A}}
+    \begin{bmatrix}
+    \setlength\arrayrulewidth{.1pt}
+    \begin{array}{c}
+        \mathbf{u}_{\Omega_1} \\
+        \mathbf{u}_{\Gamma_1} \\ \hline
+        \mathbf{u}_{\Omega_2} \\
+        \mathbf{u}_{\Gamma_2} \\ \hline
+        \boldsymbol{\lambda} \\
+    \end{array}
+    \end{bmatrix}
+    =
+    \underbrace{
+    \begin{bmatrix}
+    \setlength\arrayrulewidth{.1pt}
+    \begin{array}{c}
+        \mathbf{f}_{\Omega_1} \\
+        \mathbf{f}_{\Gamma_1} \\ \hline
+        \mathbf{f}_{\Omega_2} \\
+        \mathbf{f}_{\Gamma_2} \\ \hline
+        \mathbf{d} \\
+    \end{array}
+    \end{bmatrix}
+    }_{=\mathbf{b}}
+    \label{equ:linear-system}
+    \end{equation}
+    
+    \centering
+    \scalebox{0.6}{\input{figures/sketch_plane_sphere_labeled.tex}}
+\end{frame}
+
+\begin{frame}{Inequality constraints}
+Valid solution only if inequality constraints hold:
+
+\begin{enumerate}
+    \item No interface nodes are in tension:
+        \begin{equation} \label{equ:convcheck1}
+            \boldsymbol{\lambda} \cdot \mathbf{n} \leq 0
+        \end{equation}
+    \item No interpenetrating interface nodes:
+        \begin{equation} \label{equ:convcheck2}
+            \mathbf{d}' \cdot \mathbf{n} \geq 0
+        \end{equation}
+\end{enumerate}
+\end{frame}
+
+\begin{frame}{Algorithm for contact mechanics}
+    \begin{block}{Procedure for solving contact problems}
+    Start from an initial configuration and iterate:
+    \begin{enumerate}
+        \item<2-> Find interface nodes and radius parameters $r_m$
+        \item<3-> Assemble $\mathbf{A}$ and $\mathbf{b}$, and solve the linear system $\mathbf{A} \mathbf{x} = \mathbf{b}$
+    \end{enumerate}
+    \onslide<4->{If the inequality constraints are verified $\implies$ \textcolor{darkblue}{\textbf{RETURN}}}
+    \begin{enumerate}
+        \setcounter{enumi}{2}
+        \item<5-> Update the set of active nodes
+    \end{enumerate}
+    \end{block}
+    \begin{tikzpicture}
+    
+    \node at (-5.5, 0) {\scalebox{0.7}{\input{plots/example_initial.pgf}}};
+    \node at (-6.75, 1) {initial};
+
+    \onslide<2->{
+    \node at (-2, 0) {\scalebox{0.7}{\input{plots/example_iter0_interface.pgf}}};
+    \node at (-3, 1) {1.};
+    }
+
+    \onslide<3->{
+    \node at (1.5, 0) {\scalebox{0.7}{\input{plots/example_iter0_solution.pgf}}};
+    \node at (0.5, 1) {2.};
+    }
+
+    \onslide<5->{
+    \node at (5, 0) {\scalebox{0.7}{\input{plots/example_iter0_dumping.pgf}}};
+    \node at (4, 1) {3.};
+    }
+    \end{tikzpicture}
+    
+\end{frame}
+
+\begin{frame}{Test cases}
+\centering
+\scalebox{0.7}{\input{figures/test_plane_sphere.tex}}
+\hspace{25pt}
+\scalebox{0.7}{\input{figures/test_sphere_sphere.tex}}
+\end{frame}
+
+\begin{frame}{Results (1/2)}
+\centering
+\scalebox{0.9}{\input{plots/normal_displacement_2d.pgf}}
+\scalebox{0.9}{\input{plots/contact_radius_2d.pgf}}
+\end{frame}
+
+%\begin{frame}{Results (2/2)}
+%\centering
+%\scalebox{0.9}{\input{plots/normal_displacement_3d.pgf}}
+%\scalebox{0.9}{\input{plots/contact_radius_3d.pgf}}
+%\end{frame}
+
+\begin{frame}{Results (2/2)}
+\centering
+\scalebox{0.9}{\input{plots/solution_circle_circle_2d.pgf}}
+\scalebox{0.9}{\input{plots/zero_deviation.pgf}}
+\end{frame}
+
+\begin{frame}{Starting point}
+\begin{itemize}
+    \item Existing Akantu contact mechanics implementation, using the "penalty" method, centered around \ci{ContactMechanicsModel} and its \ci{ContactDetector}.
+    \item Original MATLAB reference implementation of INTERNODES by a previous student (Yannis).
+    \item Python reference implementation of INTERNODES by another previous student (Moritz).
+    \item Partial C++ implementation of INTERNODES by Moritz.
+\end{itemize}
+
+\begin{center}
+    \includegraphics[width=0.1\textwidth]{figures/Matlab_Logo.png}%
+    \hspace{0.07\textwidth}%
+    \includegraphics[width=0.1\textwidth]{figures/Python_Logo.png}%
+    \hspace{0.07\textwidth}%
+    \includegraphics[width=0.1\textwidth]{figures/C++_Logo.png}%
+\end{center}
+
+\end{frame}
+
+\begin{frame}{Goal}
+The goal is to provide a usable INTERNODES implementation in Akantu, with attention to a few points:
+\begin{itemize}
+    \item Robust implementation and extensive tests, to validate the method.
+    \item Common architecture for penalty and INTERNODES contact, to make future developments easier and keep the code neatly organized.
+    \item Similar Python interface for penalty and INTERNODES contact, to make switching between the methods easy.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Extended Python prototype}
+\only<1>{
+Because three implementations were not enough, we decided to write a fourth one...
+
+\begin{center}
+    \includegraphics[width=0.1\textwidth]{figures/Matlab_Logo.png}%
+    \hspace{0.07\textwidth}%
+    \includegraphics[width=0.1\textwidth]{figures/Python_Logo.png}%
+    \hspace{0.07\textwidth}%
+    \includegraphics[width=0.1\textwidth]{figures/C++_Logo.png}%
+    \hspace{0.07\textwidth}%
+    \includegraphics[width=0.1\textwidth]{figures/Python_Logo.png}%
+\end{center}
+}\pause
+We refactored Moritz's Python prototype and used it as a testing ground.
+\begin{itemize}
+    \item Carefully documented every step, with references to the relevant papers.
+    \item Convergence check prototyping and first working implementation.
+    \item Test case prototyping and first working implementation.
+\end{itemize}
+All of these improvements were ported to C++.
+\end{frame}
+
+\begin{frame}{C++: the convergence check}
+\begin{itemize}
+    \item Brief reminder of what the convergence check is. % Here I will go back to the Algorithm slide and explain which steps this corresponds to.
+    \item Missing in Moritz's C++ implementation, had to be ported from the extended Python prototype.
+    \item Normal computations need special attention to work both in 2D and 3D.
+    \item The set of active nodes changes at each iteration.
+    \begin{itemize}
+        \item Number of \(\lambda\) variables changes at each iteration, but we cannot resize the DOFs (degrees of freedom) in Akantu.
+        \item Allocate one \(\lambda\) variable for each candidate node.
+        \item Add identity submatrix for the inactive variables to preserve numerical stability.
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Spatial Grids}
+For radius parameter search, we need to list the nodes in a (relatively small) circle. How can we do this efficiently?
+\begin{itemize}
+    \item Option 1: Iterate over each node, check if it's in the circle.
+    \item<2-> Option 2: We can build a spatial grid instead, and only check neighboring cells!
+    
+    \input{figures/spatial_grid.tex}
+    \begin{itemize}
+        \item Also used by the penalty method, so grid building is shared between the methods via \ci{AbstractContactDetector}.
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Architecture concerns}
+\begin{itemize}
+    \item Penalty: separate contact mechanics implementation and solid mechanics implementation, bridged by a \ci{CouplerSolidContact}.
+    \begin{itemize}
+        \item Dispatches to contained \ci{ContactMechanicsModel}.
+        \item Dispatches to contained \ci{SolidMechanicsModel}.
+    \end{itemize}
+    \item<2-> INTERNODES: the \ci{ContactMechanicsInternodesModel} contains a solid mechanics implementation.
+    \begin{itemize}
+        \item Contains the INTERNODES contact mechanics code.
+        \item Dispatches to contained \ci{SolidMechanicsModel}.
+    \end{itemize}
+    \item<3-> Refactor INTERNODES to use a coupler too?
+    \begin{itemize}
+        \item<4-> Problem: Sharing the coupler code is hard due to algorithmic differences. Lots of templates, template specialization and inheritance leading to very complicated code.
+        \item<5-> Problem: The standalone contact models are not usable, yet they extend \ci{Model}.
+    \end{itemize}
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Architecture concerns: what we really want}
+The goal is to easily swap from one contact mechanics implementation to the other using the Python interface. This can be done without refactoring to a coupler.
+
+\lstinputlisting[language=diff]{listings/run.py.diff}
+
+Current status: works. However, Python uses dynamic typing hence the common interface is not well defined.
+\end{frame}
+
+\begin{frame}{Architecture concerns: proposed solution}
+We can introduce a well-defined C++ common interface implemented by both \ci{CouplerSolidContact} and \ci{ContactMechanicsInternodesModel}.
+
+\lstinputlisting[language=C++]{listings/solidcontactmodel.hh}
+\end{frame}
+
+\begin{frame}{Contact mechanics renames}
+\begin{itemize}
+    \item For a long time, Akantu only had a single implementation of contact mechanics, which is why its classes use generic names such as \ci{ContactMechanicsModel} or \ci{ContactDetector}.
+    \item Now that there is a second contact mechanics implementation, we propose renaming the penalty method classes to more appropriate names.\begin{itemize}
+        \item \ci{ContactMechanicsModel} \(\rightarrow\) \ci{ContactMechanicsPenaltyModel}.
+        \item \ci{ContactDetector} \(\rightarrow\) \ci{ContactDetectorPenalty}.
+        \item \ci{CouplerSolidContact} \(\rightarrow\) \ci{CouplerSolidContactPenalty}.
+    \end{itemize}
+    \item We intend to carry out these impactful refactors with Nico's approval once INTERNODES is merged.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Appendix: Debugging Akantu through Python}
+It's possible to step through Akantu C++ code, print variables, etc... even when running it through a Python script. A very handy trick for debugging !
+\lstset{escapeinside={(*@}{@*)}}
+\lstinputlisting[belowskip=0pt, basicstyle=\tiny, lastline=1]{listings/gdb.txt}%
+\pause%
+\lstinputlisting[aboveskip=0pt, belowskip=0pt, basicstyle=\tiny, firstline=2, lastline=4]{listings/gdb.txt}%
+\pause%
+\lstinputlisting[aboveskip=0pt, belowskip=0pt, basicstyle=\tiny, firstline=5, lastline=6]{listings/gdb.txt}%
+\pause%
+\lstinputlisting[aboveskip=0pt, belowskip=0pt, basicstyle=\tiny, firstline=7, lastline=8]{listings/gdb.txt}%
+\pause%
+\lstinputlisting[aboveskip=0pt, belowskip=0pt, basicstyle=\tiny, firstline=9, lastline=12]{listings/gdb.txt}%
+\pause%
+\lstinputlisting[belowskip=0pt, basicstyle=\tiny, firstline=13]{listings/gdb.txt}
+\end{frame}
+
+%\begin{frame}{Bibliography}
+%\bibliography{biblio.bib}
+%\end{frame}
+
+
+
+
+
+
+\end{document}

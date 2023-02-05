@@ -8,7 +8,7 @@ r = 0.5; // Radius of the circle
 d = 0.05; // Initial penetration overlap of sphere
 
 a = 0.4; // Maximum expected radius of contact area
-n = 10; // Number of mesh refinements for candidates
+n = 15; // Number of mesh refinements for candidates
 
 
 // ---> PRIMARY

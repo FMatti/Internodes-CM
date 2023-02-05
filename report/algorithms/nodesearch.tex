@@ -2,14 +2,14 @@
     \Require Positions of primary nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
     \Require Positions of secondary nodes $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$
     \Require Radial basis function $\phi: \mathbb{R}^d \to \mathbb{R}_{\geq 0}$
-    \Require Constant $C \in (0, 1)$
+    \Require Constant $C \in (c, 1)$
     \State Let $\mathcal{I} = \{1, 2, \dots \}$ and $\mathcal{J} = \{1, 2, \dots \}$ denote an index set of active nodes
     \State Compute distance matrix $\mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}$ defined in \refequ{equ:distance-matrix}
     \While{$\mathcal{I}$ or $\mathcal{J}$ were modified in the previous iteration}
         \State Obtain radial basis parameters $r^{\boldsymbol{\xi}}_i$, $i \in \mathcal{I}$ and
         $r^{\boldsymbol{\zeta}}_j$, $j \in \mathcal{J}$ using \refalg{alg:radiusparameters}
-        \State Remove isolated nodes $i \in \mathcal{I}$ with $\min_{j \in \mathcal{J}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\zeta}}_j$ \Comment{Condition \refequ{equ:C-condition}}
-        \State Remove isolated nodes $j \in \mathcal{J}$ with $\min_{i \in \mathcal{I}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\xi}}_i$ \Comment{Condition \refequ{equ:C-condition}}
+        \State Remove isolated nodes $i \in \mathcal{I}$ with $\min_{j \in \mathcal{J}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\zeta}}_j$ \Comment{\refcon{con:C-condition}}
+        \State Remove isolated nodes $j \in \mathcal{J}$ with $\min_{i \in \mathcal{I}} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) \geq Cr^{\boldsymbol{\xi}}_i$ \Comment{\refcon{con:C-condition}}
     \EndWhile
     \State \textbf{return} Sets of active nodes $\mathcal{I}$ and $\mathcal{J}$ with radius parameters $r^{\boldsymbol{\xi}}_i, i \in \mathcal{I}$ and $r^{\boldsymbol{\zeta}}_j, j \in \mathcal{J}$
 \end{algorithmic}

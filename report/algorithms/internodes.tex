@@ -8,7 +8,7 @@
         \State Assemble the matrix $\mathbf{A}$ and right-hand side $\mathbf{b}$ of \refequ{equ:linear-system}
         \State Solve \refequ{equ:linear-system} to obtain displacements $\mathbf{u}$ and Lagarnge multipliers $\boldsymbol{\lambda}$
         \State Update the interface candidate nodes $\mathcal{I}^C$ and $\mathcal{J}^C$ with
-        $\mathcal{I}$ and $\mathcal{J}$, respectively, where all nodes in tension
-        have been removed and all interpenetrating nodes have been added 
+        $\mathcal{I}$ and $\mathcal{J}$, respectively, by removing all nodes in tension
+        and adding interpenetrating nodes
     \EndWhile
 \end{algorithmic}

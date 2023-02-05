@@ -27,11 +27,12 @@
 %%% COLOR THEME
 
 % Color package
-\usepackage{xcolor}
+\usepackage[svgnames]{xcolor}
 
 % Color definitions
 \definecolor{darkblue}{HTML}{2F455C}
 \definecolor{mainblue}{HTML}{0e437c}
+\definecolor{mainorange}{HTML}{d55209}
 \colorlet{lightblue}{darkblue!10!white}
 
 
@@ -77,21 +78,24 @@
 \counterwithin{figure}{section}
 \counterwithin{table}{section}
 \counterwithin{equation}{section}
-\usepackage[list=true, listformat=simple]{subcaption}
+\usepackage[labelfont=rm, list=true, listformat=simple]{subcaption}
 
 % Reference commands
-\newcommand{\reffig}[1]{\hyperref[#1]{\textcolor{mainblue}{Figure \ref*{#1}}}}
-\newcommand{\reftab}[1]{\hyperref[#1]{\textcolor{mainblue}{Table \ref*{#1}}}}
-\newcommand{\reflin}[1]{\hyperref[#1]{\textcolor{mainblue}{Line \ref*{#1}}}}
+\newcommand{\reffig}[1]{\hyperref[#1]{\textcolor{mainblue}{Figure~\ref*{#1}}}}
+\newcommand{\reftab}[1]{\hyperref[#1]{\textcolor{mainblue}{Table~\ref*{#1}}}}
+\newcommand{\reflin}[1]{\hyperref[#1]{\textcolor{mainblue}{Line~\ref*{#1}}}}
 \newcommand{\refequ}[1]{\hyperref[#1]{\textcolor{mainblue}{(\ref*{#1})}}}
-\newcommand{\refdef}[1]{\hyperref[#1]{\textcolor{mainblue}{Definition \ref*{#1}}}}
-\newcommand{\reflem}[1]{\hyperref[#1]{\textcolor{mainblue}{Lemma \ref*{#1}}}}
-\newcommand{\refthm}[1]{\hyperref[#1]{\textcolor{mainblue}{Theorem \ref*{#1}}}}
-\newcommand{\refalg}[1]{\hyperref[#1]{\textcolor{mainblue}{Algorithm \ref*{#1}}}}
-\newcommand{\refsec}[1]{\hyperref[#1]{\textcolor{mainblue}{Section \ref*{#1}}}}
+\newcommand{\refcon}[1]{\hyperref[#1]{\textcolor{mainblue}{\ref*{#1}}}}
+\newcommand{\refdef}[1]{\hyperref[#1]{\textcolor{mainblue}{Definition~\ref*{#1}}}}
+\newcommand{\reflem}[1]{\hyperref[#1]{\textcolor{mainblue}{Lemma~\ref*{#1}}}}
+\newcommand{\refthm}[1]{\hyperref[#1]{\textcolor{mainblue}{Theorem~\ref*{#1}}}}
+\newcommand{\refalg}[1]{\hyperref[#1]{\textcolor{mainblue}{Algorithm~\ref*{#1}}}}
+\newcommand{\refsec}[1]{\hyperref[#1]{\textcolor{mainblue}{Section~\ref*{#1}}}}
 
 
 %%% FLOATS
+
+\usepackage{float}
 
 % Figures
 \usepackage{graphicx}
@@ -112,6 +116,19 @@
 % Algorithms
 \usepackage{algorithm}
 \usepackage{algpseudocode}
+\usepackage{listings}
+
+% diff listing language - https://tex.stackexchange.com/questions/105995/is-there-a-ready-solution-to-typeset-a-diff-file
+  \definecolor{diffstart}{named}{Grey}
+  \definecolor{diffincl}{named}{Green}
+  \definecolor{diffrem}{named}{OrangeRed}
+  
+  \lstdefinelanguage{diff}{
+    basicstyle=\ttfamily\small,
+    morecomment=[f][\color{diffstart}]{@@},
+    morecomment=[f][\color{diffincl}]{+\ },
+    morecomment=[f][\color{diffrem}]{-\ },
+  }
 
 
 %%% MATHEMATICS

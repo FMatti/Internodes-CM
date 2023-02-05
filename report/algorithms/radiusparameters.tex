@@ -5,9 +5,9 @@
     \State Compute distance matrix $\mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}$ defined in \refequ{equ:distance-matrix}
     \State For each node $i$, compute distance to closest neighbor $d_i = \min_{j \neq i} \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}(i, j)$
     \While{$c \leq C$}
-        \State For each node $i$, let $r_i \gets d_i / c$ \Comment{Condition \refequ{equ:c-condition}}
+        \State For each node $i$, let $r_i \gets d_i / c$ \Comment{\refcon{con:c-condition}}
         \State For each node $i$, count $n_i = \# \{j \neq i: \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\xi}}(i, j) < r_i \}$
-        \If{For all nodes $i$, $n_i < 1/\phi(c)$} \Comment{Condition \refequ{equ:support-condition}}
+        \If{For all nodes $i$, $n_i < 1/\phi(c)$} \Comment{\refcon{con:support-condition}}
             \State \textbf{break}
         \EndIf
         \State Increase $c$

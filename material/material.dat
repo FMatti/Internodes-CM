@@ -6,6 +6,6 @@ material elastic [
 ]
 
 contact_detector [
-  master = lower_top 
-  slave = upper_bottom
+  master = primary_candidates
+  slave = secondary_candidates
 ]

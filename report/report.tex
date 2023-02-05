@@ -4,8 +4,8 @@
 
 \institution{EPFL}
 \project{Semester Project}
-\title{Internodes garbage}
-\author{Fabio Matti}
+\title{Akantu implementation of the INTERNODES method for contact mechanics}
+\author{Bruno Ploumhans \& Fabio Matti}
 \supervisor{Dr Guillaume Anciaux \\ Raquel Dantas Batista}
 \date{\today}
 
@@ -13,88 +13,114 @@
 
 \maketitle
 
-\section{Introduction}
-\label{sec:intro}
+\tableofcontents
 
 \clearpage
+\section{Introduction}
+\label{sec:intro}
+INTERNODES (INTERpolation for NOn-conforming DEcompositionS) is a recently developed method for numerical contact mechanics. It was initially proposed in \cite{deparis} and further developed for two-body contact problems in \cite{voet}. It is believed to be simpler and more robust than alternatives such as the mortar finite element method. Continuing the work of previous students, we fully implemented and tested the INTERNODES method in the framework of Akantu\footnote{\url{https://gitlab.com/akantu/akantu}}, a generic and efficient finite element solver developed by EPFL written in C++, with the main goal of making our implementation reliable for broader usage.
 
+In this paper, we briefly explain how the method works. Then, we go through important details of our implementation, and we dicuss the tests that we wrote to validate it. Finally, we discuss further improvements that can be made to the computational contact mechanics package of Akantu.
+
+\clearpage
 \section{The INTERNODES method for contact mechanics}
 \label{sec:internodes}
+
+In essence, the INTERNODES method makes use of two different interpolants which are used to transfer information from one interface to another. To this purpose, radial basis function (RBF) interpolants are introduced.
 
 \subsection{Radial basis interpolation}
 \label{subsec:rbf-interpolation}
 
-Interpolant of $g : \mathbb{R}^d \to \mathbb{R}$ at interpolation nodes $\boldsymbol{\xi}_1, \dots, \boldsymbol{\xi}_M$  with radius parameter $r$
+The engine of radial basis interpolation are the radial basis functions (RBF) $\phi: \mathbb{R}^d \to \mathbb{R}$. These functions take values that are isometric, i.e. only depend on the distance from their corresponding node $\boldsymbol{\xi}$ and are parametrized by the radius parameter $r$.
+
+The radial basis interpolant of $g : \mathbb{R}^d \to \mathbb{R}$ at interpolation nodes $\boldsymbol{\xi}_1, \dots, \boldsymbol{\xi}_M$ with associated radius parameters $r_1, \dots, r_M$ will be defined as
 \begin{equation}
-    \Pi(\mathbf{x}) = \sum_{m=1}^M g_m \phi(\left\| \mathbf{x} - \boldsymbol{\xi}_m \right\|, r)
+    \Pi(\mathbf{x}) = \sum_{m=1}^M g(\boldsymbol{\xi}_m) \phi(\left\| \mathbf{x} - \boldsymbol{\xi}_m \right\|, r_m)
 \end{equation}
+One can easily see that the interpolant is merely a superposition of rescaled RBFs. This fact, as well as the parameters used to define the radial basis function are depicted in \reffig{fig:radialbasis}.
 
 \begin{figure}[ht]
     \centering
     \input{figures/radialbasis.tex}
-    \caption{Radial basis functions}\label{fig:radialbasis}
+    \caption{Visualization of the parameters which are used to define radial basis functions. Notice that the radius parameters $r_j$ must not necessarily coincide with the radius of the support of the function, as is the case for the Wendland $C^2$ RBF.}\label{fig:radialbasis}
 \end{figure}
 
-Wendland $C^2$ radial basis function
+It is established in \cite{voet} that the Wendland $C^2$ RBF possesses particularly desirable properties. The aforementioned RBF is defined as
 \begin{equation}
     \phi(\delta) = (1 - \delta)_{+}^4(1 + 4\delta) 
 \end{equation}
-with $\delta = \left\| \mathbf{x} - \boldsymbol{\xi}_m \right\| / r$ are well suited.
+with $\delta = \left\| \mathbf{x} - \boldsymbol{\xi}_m \right\| / r$.
 
-Denoting $\mathbf{g}_{\zeta} = (g(\boldsymbol{\zeta}_1), \dots, g(\boldsymbol{\zeta}_N))^T$ and $\mathbf{g}_{\xi} = (g(\boldsymbol{\xi}_1), \dots, g(\boldsymbol{\xi}_M))^T$ we can write
+Denoting with $\mathbf{g}_{\zeta} = (g(\boldsymbol{\zeta}_1), \dots, g(\boldsymbol{\zeta}_N))^{\top}$ the evaluations of the function $g$ at positions $\boldsymbol{\zeta}_1, \dots, \boldsymbol{\zeta}_N$ collected in a vector, and with $\mathbf{g}_{\xi} = (g(\boldsymbol{\xi}_1), \dots, g(\boldsymbol{\xi}_M))^{\top}$ the function values at the interpolation nodes $\boldsymbol{\xi}_1, \dots, \boldsymbol{\xi}_M$, we may write
 \begin{equation}
     \mathbf{g}_{\zeta} = \mathbf{D}_{NN}^{-1} \boldsymbol{\Phi}_{NM} \boldsymbol{\Phi}_{MM}^{-1} \mathbf{g}_{\xi}
 \end{equation}
-with the radial basis matrices
+where the radial basis matrices are defined as
 \begin{align}
     (\boldsymbol{\Phi}_{MM})_{ij} &= \phi(\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\|, r_j) \hspace{10px} i, j \in \{1, \dots, M\} \\
     (\boldsymbol{\Phi}_{NM})_{ij} &= \phi(\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\|, r_j) \hspace{10px} i \in \{1, \dots, N\},~ j \in \{1, \dots, M\}
 \end{align}
+Therefore, the interpolation matrix is identified as
+\begin{equation}
+\mathbf{R}_{NM} = \mathbf{D}_{NN}^{-1} \boldsymbol{\Phi}_{NM} \boldsymbol{\Phi}_{MM}^{-1} \label{equ:interpolation-matrix}
+\end{equation}
 
-Deparis et. al. \cite{deparis} proposed two modifications:
+There are two particularities about the above formulation of an interpolation which distinguish it from classical radial basis interpolaion. The two modifications which were proposed in Deparis et. al. \cite{deparis} are:
 
 \begin{itemize}
     \item Localized radius parameters for each node $r_{j}$, $j \in \{1, \dots, M\}$
-    \item Rescaling with $\mathbf{D}_{NN}^{-1}$ to obtain exact interpolation of constant functions
+    \item Rescaling with $\mathbf{D}_{NN}^{-1}$ to recover exact interpolation of constant functions, where we define
+    % TODO: Find a simpler expression
+    \begin{equation}
+        (\mathbf{D}_{NN})_{ij} =
+        \begin{cases}
+            (\boldsymbol{\Phi}_{NM}\boldsymbol{\Phi}_{MM}^{-1}\boldsymbol{1}_{\zeta})_i, &\text{ if } i = j \\
+            0, &\text{ if } i \neq j
+        \end{cases}
+    \end{equation}
 \end{itemize}
+
+These two modifications decisively impact the stability and well-posedness of the interpolation. To achieve a \enquote{good} interpolation, multiple conditions on the radius parameters $r_j$ need to be satisfied. These will be written down and discussed in the next subsection.
 
 \subsection{Radius parameters}
 \label{subsec:radius-parameters}
-Conditions \cite{voet}:
 
-\begin{subequations}
+In order to ensure the invertibility of both $\boldsymbol{\Phi}_{MM}$ and $\mathbf{D}_{NN}$ the following conditions derived in \cite{voet} should hold:
+
+\begin{block}{Conditions on radius parameters}
+There exist $c \in (0, 1)$ and $C \in (c, 1)$ such that
 \begin{align}
-    \text{Limited number of supported interpolation nodes: } \notag \\
-    \forall i: \# \{j \neq i: \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| < r_i \} &< 1 / \phi(c) \label{equ:support-condition} \\
-    \text{Interpolation nodes not be too deep in another support: } \notag \\ 
-    \exists c \in (0, 1), \forall i \neq j:~\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| &\geq c r_j \label{equ:c-condition} \\
-    \text{All reference nodes in support of interpolation node: } \notag \\ 
-    \exists C \in (c, 1), \forall i, \exists j:~\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\| &\leq C r_j \label{equ:C-condition}
+    \forall i: \# \{j \neq i: \left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| < r_i \} &< 1 / \phi(c) \label{con:support-condition}  \tag{Condition 1} \\
+    \forall i \neq j:~\left\| \boldsymbol{\xi}_i - \boldsymbol{\xi}_j \right\| &\geq c r_j \label{con:c-condition}  \tag{Condition 2}  \\
+    \forall i, \exists j:~\left\| \boldsymbol{\zeta}_i - \boldsymbol{\xi}_j \right\| &\leq C r_j \label{con:C-condition}  \tag{Condition 3} 
 \end{align}
-\label{equ:conditions}
-\end{subequations}
+\end{block}
+
+\refcon{con:support-condition} says that there can only be a limited number of other interpolation nodes within the support of the radial basis function sitting at each interpolation nodes. \refcon{con:c-condition} prohibits two interpolation nodes from being chosen too close to each other. Finally, \refcon{con:C-condition} ensures that at each point at which the interpolant will be evaluated is within the support of an interpolation nodes. 
+
+In \reffig{fig:radiusparameters} these conditions are visualized using examples which violate them.
 
 \begin{figure}[ht]
     \centering
     \begin{subfigure}[b]{.32\linewidth}
-        \centering
-        \input{figures/radiusparameters1.tex}
-        \caption{Too small}\label{fig:radiusparameters1}
+        \input{figures/radiusparameters2.tex}
+        \caption{Violates \refcon{con:c-condition}.}\label{fig:radiusparameters1}
     \end{subfigure}
     \begin{subfigure}[b]{.32\linewidth}
-        \input{figures/radiusparameters2.tex}
-        \caption{Too big}\label{fig:radiusparameters2}
+        \centering
+        \input{figures/radiusparameters1.tex}
+        \caption{Violates \refcon{con:C-condition}.}\label{fig:radiusparameters2}
     \end{subfigure}
     \begin{subfigure}[b]{.32\linewidth}
         \input{figures/radiusparameters3.tex}
-        \caption{Just right}\label{fig:radiusparameters3}
+        \caption{Valid parameter choice.}\label{fig:radiusparameters3}
     \end{subfigure}
-    \caption{Finding radius parameters}
+    \caption{Visualization of the process of finding suitable radius parameters. The inner circle has radius $cr_j$ while the outer one has radius $Cr_j$. Marked in orange are nodes which in each configuration cause one of the conditions to be violated.}
     \label{fig:radiusparameters}
 \end{figure}
 
-Distance matrix between nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
-and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ is defined as
+Our task is now to find suitable radius parameters which satisfy the above conditions. To first simplify the notation and later use it to reduce the complexity of the algorithm we introduce the distance matrix between two sets of nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$
+and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ which we define as
 
 \begin{equation}
     \mathbf{D}^{\boldsymbol{\xi}, \boldsymbol{\zeta}}(i, j) =
@@ -102,132 +128,131 @@ and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ is defined as
     \label{equ:distance-matrix}
 \end{equation}
 
-\begin{algorithm}
+Making use of this definition, we now propose a procedure, which, given an arbitrary set of interpolation nodes $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$ finds a suitable set of radius parameters $\{r_1, r_2, \dots \}$. The procedure is detailed in \refalg{alg:radiusparameters}.
+
+\begin{algorithm}[H]
     \caption{Computation of radius parameters}
     \input{algorithms/radiusparameters.tex}
     \label{alg:radiusparameters}
 \end{algorithm}
 
-This algorithm has three main benefits over the previous implementation:
+In the setting of finite element approximations for contact mechanics, the interpolation nodes are usually taken to be the mesh points corresponding to the interface between two bodies that are in contact. Consequently, $\{\boldsymbol{\xi}_1, \boldsymbol{\xi}_2, \dots\}$ are the mesh points which correspond to one body, named the \enquote{primary},
+and $\{\boldsymbol{\zeta}_1, \boldsymbol{\zeta}_2, \dots\}$ correspond to the other body, named the \enquote{secondary}. Based on \refalg{alg:radiusparameters}, we now propose a second procedure which ensures that for a given contact problem \refcon{con:C-condition} is satisfied. In multiple iterations an index set $\mathcal{I}$ of primary interface nodes and an index set $\mathcal{J}$ of secondary interface nodes are determined by removing nodes from the original set of nodes which are isolated, i.e. not clearly within the support of an interpolation node from the opposite interface. The procedure is given in \refalg{alg:nodesearch}.
 
-\begin{itemize}
-    \item For uniform meshes (constant mesh size) all radial basis parameters will be the exact same
-    \item The computation of the distance matrix is done outside the \texttt{while}-loops
-    \item The algorithm will find interface nodes for a wider class of examples
-\end{itemize}
-
-\begin{algorithm}
+\begin{algorithm}[H]
     \caption{Search for interpolation nodes}
     \input{algorithms/nodesearch.tex}
     \label{alg:nodesearch}
 \end{algorithm}
 
+These two algorithms (\refalg{alg:radiusparameters} and \refalg{alg:nodesearch}) hold three main benefits over the implementation found in \cite{voet}:
 
-\begin{figure}[ht]
-    \centering
-    \begin{subfigure}[b]{\linewidth}
-        \centering
-        \input{plots/example_initial.pgf}
-        \caption{Initial configuration}\label{fig:example-initial}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter0_interface.pgf}
-        \caption{Iteration 1: Find interface}\label{fig:example-iter0-interface}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter0_solution.pgf}
-        \caption{Iteration 1: Solve system}\label{fig:example-iter0-solution}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter0_dumping.pgf}
-        \caption{Iteration 1: Update interface}\label{fig:example-iter0-dumping}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter1_interface.pgf}
-        \caption{Iteration 2: Find interface}\label{fig:example-iter1-interface}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter1_solution.pgf}
-        \caption{Iteration 2: Solve system}\label{fig:example-iter1-solution}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter1_dumping.pgf}
-        \caption{Iteration 2: Update interface}\label{fig:example-iter1-dumping}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter2_interface.pgf}
-        \caption{Iteration 3: Find interface}\label{fig:example-iter2-interface}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter2_solution.pgf}
-        \caption{Iteration 3: Solve system}\label{fig:example-iter2-solution}
-    \end{subfigure}
-    \begin{subfigure}[b]{.32\linewidth}
-        \input{plots/example_iter2_dumping.pgf}
-        \caption{Iteration 3: Update interface}\label{fig:example-iter2-dumping}
-    \end{subfigure}
-    \caption{First iteration}
-    \label{fig:example-iter2}
-\end{figure}
+\begin{itemize}
+    \item For uniform meshes (constant element size) all radial basis parameters will be the exact same, i.e. $r^{\boldsymbol{\xi}}_1 = r^{\boldsymbol{\xi}}_2 = \cdots = r^{\boldsymbol{\zeta}}_1 = r^{\boldsymbol{\zeta}}_2 = \cdots $.
+    \item The computation of the distance matrix is done outside the \texttt{while}-loop, and hence reduces the compuational complexity by a factor which corresponds to the number of iterations required to find the suitable sets of interpolation nodes
+    \item The algorithm will find interface nodes for a wider class of examples.
+\end{itemize}
+
+This procedure can further be optimized by introducing a \texttt{SpatialGrid}, which we have done in our implementations in Akantu.
 
 \subsection{Strong form}
 \label{subsec:strong}
 
-The strong form of the problem is formulated for the displacement field $\mathbf{u}$:
+A stereotypical example of a contact problem which we aim to solve is sketched in \reffig{fig:contactproblem}.
+
+\begin{figure}[H]
+    \centering
+    \input{figures/contactproblem.tex}
+    \caption{Contact problem where a semisphere $\Omega_2$ interfaces with a half-space $\Omega_1$.}\label{fig:contactproblem}
+\end{figure}
+
+The strong form of the problem is formulated for the displacement field 
+$\mathbf{u}: \Omega_{1, 2} \to \mathbb{R}^d$. Each body participating in the contact needs to individually satisfy the following equilibrium equations \cite{voet}:
+
+\begin{block}{Equilibrium equations}
+A solid subject to an external force $\mathbf{f}$ satisfies the following boundary problem
 \begin{align}
-    \begin{cases}
-        - \text{div}(\boldsymbol{\sigma}(\mathbf{u})) = \mathbf{f} &\text{Differential equation (Cauchy stress tensor $\boldsymbol{\sigma}$)}\\
-        \mathbf{u} = \mathbf{g} &\text{Dirichlet boundary conditions (displacement field $\mathbf{g}$)}\\
-        \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} = \mathbf{t} &\text{Neumann boundary conditions (surface traction $\mathbf{t}$)}\\
-        \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} = \boldsymbol{\lambda} &\text{Lagrange multipliers $\boldsymbol{\lambda}$ defined along interface $\Gamma$}\\
-        \boldsymbol{\lambda} \cdot \mathbf{n} \leq 0 &\text{Hertz-Signorini-Moreau condition enforced along interface $\Gamma$}
-    \end{cases}
+     \text{div}(\boldsymbol{\sigma}(\mathbf{u})) &= \mathbf{f} \label{con:stress-tensor} \tag{Differential equation with Cauchy stress tensor $\boldsymbol{\sigma}$} \\
+    \mathbf{u} &= \mathbf{g} \label{con:dirichlet}  \tag{Dirichlet boundary conditions with displacement field $\mathbf{g}$}  \\
+    \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} &= \mathbf{t} \label{con:neumann}  \tag{Neumann boundary conditions with surface traction $\mathbf{t}$}  \\
+    \boldsymbol{\sigma}(\mathbf{u}) \mathbf{n} &= \boldsymbol{\lambda} \label{con:lagrange}  \tag{Lagrange multipliers $\boldsymbol{\lambda}$ defined along interface $\Gamma$}  \\
+    \boldsymbol{\lambda} \cdot \mathbf{n} &\leq 0 \label{con:hertz} \tag{Hertz-Signorini-Moreau condition along interface $\Gamma$}
 \end{align}
+\end{block}
+
+In order to numerically approximate solutions for these problems, a finite element discretization of the domain needs to be computed, and the strong form converted into a weak form of the problem. This will be done in the next section.
 
 \subsection{Weak form}
 \label{subsec:weak}
 
-The weak formulation results in a linear system for the displacements $\mathbf{u}$ and Lagrange multipliers $\boldsymbol{\lambda}$ \cite{voet}:
+For the weak formulation, the Hertz-Signorini-Moreau inequality constraint is relaxed, which results in a linear system for the displacements $\mathbf{u}$ and Lagrange multipliers $\boldsymbol{\lambda}$ \cite{voet}. The linear system of equations takes the form of a saddle point problem.
+
+\begin{block}{INTERNODES system of equations}
+For a contact problem between two bodies $\Omega_1$ and $\Omega_2$ with interfaces $\Gamma_1$ and $\Gamma_2$ the following system of equations is solved:
 \begin{equation}
 \underbrace{
 \begin{bmatrix}
-    \mathbf{K}_{\Omega_1\Omega_1} & \mathbf{K}_{\Omega_1\Gamma_1} & \boldsymbol{0} & \boldsymbol{0} & \boldsymbol{0} \\
-    \mathbf{K}_{\Gamma_1\Omega_1} & \mathbf{K}_{\Gamma_1\Gamma_1} & \boldsymbol{0} & \boldsymbol{0} & - \mathbf{M}_{\Gamma_1} \\
-    \boldsymbol{0} & \boldsymbol{0} & \mathbf{K}_{\Omega_2\Omega_2} & \mathbf{K}_{\Omega_2\Gamma_2} & \boldsymbol{0} \\
-    \boldsymbol{0} & \boldsymbol{0} & \mathbf{K}_{\Gamma_2\Omega_2} & \mathbf{K}_{\Gamma_2\Gamma_2} & -\mathbf{M}_{\Gamma_2} \mathbf{R}_{\Gamma_2 \Gamma_1} \\
-    \boldsymbol{0} & \boldsymbol{I} & \boldsymbol{0} & -\mathbf{R}_{\Gamma_1 \Gamma_2} & \boldsymbol{0}   
+\setlength\arrayrulewidth{.1pt}
+\begin{array}{cc|cc|c}
+    \mathbf{K}_{\Omega_1\Omega_1} & \mathbf{K}_{\Omega_1\Gamma_1} & & &  \\
+    \mathbf{K}_{\Gamma_1\Omega_1} & \mathbf{K}_{\Gamma_1\Gamma_1} & &  & - \mathbf{M}_{\Gamma_1} \\ \hline
+     & & \mathbf{K}_{\Omega_2\Omega_2} & \mathbf{K}_{\Omega_2\Gamma_2} &  \\
+     & & \mathbf{K}_{\Gamma_2\Omega_2} & \mathbf{K}_{\Gamma_2\Gamma_2} & -\mathbf{M}_{\Gamma_2} \mathbf{R}_{\Gamma_2 \Gamma_1} \\ \hline
+     & & & -\mathbf{R}_{\Gamma_1 \Gamma_2} & 
+\end{array}
 \end{bmatrix}
-}_{\mathbf{A}~\text{(INTERNODES matrix)}}
-\underbrace{
+}_{= \mathbf{A}}
 \begin{bmatrix}
+\setlength\arrayrulewidth{.1pt}
+\begin{array}{c}
     \mathbf{u}_{\Omega_1} \\
-    \mathbf{u}_{\Gamma_1} \\
+    \mathbf{u}_{\Gamma_1} \\ \hline
     \mathbf{u}_{\Omega_2} \\
-    \mathbf{u}_{\Gamma_2} \\
+    \mathbf{u}_{\Gamma_2} \\ \hline
     \boldsymbol{\lambda} \\
+\end{array}
 \end{bmatrix}
-}_{\mathbf{x}}
 =
 \underbrace{
 \begin{bmatrix}
+\setlength\arrayrulewidth{.1pt}
+\begin{array}{c}
     \mathbf{f}_{\Omega_1} \\
-    \mathbf{f}_{\Gamma_1} \\
+    \mathbf{f}_{\Gamma_1} \\ \hline
     \mathbf{f}_{\Omega_2} \\
-    \mathbf{f}_{\Gamma_2} \\
+    \mathbf{f}_{\Gamma_2} \\ \hline
     \mathbf{d} \\
+\end{array}
 \end{bmatrix}
 }_{\mathbf{b}}
 \label{equ:linear-system}
 \end{equation}
-\begin{align}
-    \mathbf{M} &:~ \text{Interface mass matrices} \\
-    \mathbf{K} &:~ \text{Stiffness matrices} \\
-    \mathbf{f} &:~ \text{Body force} \\
-    \mathbf{d} &:~ \text{Nodal gaps in configuration}
-\end{align}
+The subscripts indicate which degrees of freedom are collected in the objects. $\mathbf{M}$ and $\mathbf{K}$ denote the finite element mass and stiffness matrices respectively. The interpolation matrices $\mathbf{R}$ are defined in \refequ{equ:interpolation-matrix}. The external force is $\mathbf{f}$ and the nodal gaps between the interfaces is $\mathbf{d}$.
+\end{block}
 
-\subsection{Contact algorithm}
+\subsection{INTERNODES Contact algorithm}
 \label{subsec:contact-algorithm}
+
+In \cite{voet} an algorithm is suggested for solving problems in contact
+mechanics. For an initial guess of the interface $\Gamma$, the algorithm solves 
+the system \refequ{equ:linear-system} and in each iteration updates the interface
+by removing interface nodes that are in tension or adding nodes that are
+interpenetrating to the interface. In all available reference implementations, these two operations of adding and removing interface nodes were treated as mutually exclusive in each iteration \cite{voetthesis, voet, moritz}. In order to speed up the convergence, we have modified the procedure to be able to simultaneously remove nodes from and add back nodes to the interface.
+
+The algorithm is said to have converged, i.e. a solution to the problem has been found, if
+
+\begin{enumerate}
+    \item No nodes belonging to the interface are in tension, i.e.
+        \begin{equation} \label{equ:convcheck1}
+            \boldsymbol{\lambda} \cdot \mathbf{n} \leq 0
+        \end{equation}
+    \item No interpenetrating nodes exist, i.e. the nodal gaps $\mathbf{d}$ after solving the system all satisfy
+        \begin{equation} \label{equ:convcheck2}
+            \mathbf{d} \cdot \mathbf{n} \geq 0
+        \end{equation}
+\end{enumerate}
+
+This procedure is summarized in \refalg{alg:internodes}.
 
 \begin{algorithm}
     \caption{Contact algorithm for interrnodes method}
@@ -235,28 +260,354 @@ The weak formulation results in a linear system for the displacements $\mathbf{u
     \label{alg:internodes}
 \end{algorithm}
 
+In order to understand this algorithm more thoroughly, we run the algorithm on an example problem and visualize the different steps in \reffig{fig:example}. Notice that for producing this figure we use a simpler version of the algorithm where the iterations are only used to define the interface nodes. The Python implementation for prototyping uses this version for simplicity. The alternative is to use the \enquote{unphysical} intermediary solutions as the starting points for the next iteration in the algorithm. This is done in the Akantu implementation.
 
-\section{Experiments}
-\label{sec:experiments}
-
-\begin{figure}[ht]
-   \centering
-    \input{plots/normal_displacement_3d.pgf}
-    \caption{Normal displacements}
-    \label{fig:normal-displacements}
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}[b]{.32\linewidth}
+        \centering
+        \scalebox{0.8}{\input{plots/example_initial.pgf}}
+        \caption{Initial configuration}\label{fig:example-initial}
+    \end{subfigure}
+    \begin{subfigure}[b]{.64\linewidth}
+        \begin{tikzpicture}
+            \draw[thick, mainorange] (1.25, 3.25) circle (0.07);
+            \node[anchor=west] at (1.5, 3.25) {Candidate nodes of primary $\mathcal{I}^C$};
+            \draw[thick, mainblue] (1.25, 2.75) circle (0.07);
+            \node[anchor=west] at (1.5, 2.75) {Candidate nodes of secondary $\mathcal{J}^C$};
+            \fill[thick, mainorange] (1.25,  2.25) circle (0.07);
+            \node[anchor=west] at (1.5, 2.25) {Interface nodes of primary $\mathcal{I}$};
+            \fill[thick, mainblue] (1.25,  1.75) circle (0.07);
+            \node[anchor=west] at (1.5, 1.75) {Interface nodes of secondary $\mathcal{J}$};
+            \draw[ultra thick, mainorange] (1.2, 1.2) to (1.3, 1.3);
+            \draw[ultra thick, mainorange] (1.3, 1.2) to (1.2, 1.3);
+            \node[anchor=west] at (1.5, 1.25) {Removed nodes from primary};
+            \draw[ultra thick, mainblue] (1.2, 0.7) to (1.3, 0.8);
+            \draw[ultra thick, mainblue] (1.3, 0.7) to (1.2, 0.8);
+            \node[anchor=west] at (1.5, 0.75) {Removed nodes from secondary};
+            \fill[white] (0, 0) rectangle (0.1, 0.1);
+        \end{tikzpicture}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter0_interface.pgf}}
+        \caption{Iteration 1: Find interface}\label{fig:example-iter0-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter0_solution.pgf}}
+        \caption{Iteration 1: Solve system}\label{fig:example-iter0-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter0_dumping.pgf}}
+        \caption{Iteration 1: Update interface}\label{fig:example-iter0-dumping}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter1_interface.pgf}}
+        \caption{Iteration 2: Find interface}\label{fig:example-iter1-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter1_solution.pgf}}
+        \caption{Iteration 2: Solve system}\label{fig:example-iter1-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter1_dumping.pgf}}
+        \caption{Iteration 2: Update interface}\label{fig:example-iter1-dumping}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter2_interface.pgf}}
+        \caption{Iteration 3: Find interface}\label{fig:example-iter2-interface}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter2_solution.pgf}}
+        \caption{Iteration 3: Solve system}\label{fig:example-iter2-solution}
+    \end{subfigure}
+    \begin{subfigure}[b]{.32\linewidth}
+        \scalebox{0.8}{\input{plots/example_iter2_dumping.pgf}}
+        \caption{Iteration 3: Update interface}\label{fig:example-iter2-dumping}
+    \end{subfigure}
+    \caption{Example of the INTERNODES algorithm for contact mechanics applied to a two-dimensional problem where a circle interfaces with a rectangular structure. Convergence is obtained after three iterations.}
+    \label{fig:example}
 \end{figure}
+
+\clearpage
+\section{Implementation of the INTERNODES method}
+\label{sec:implementation}
+
+Our main objective with this project was to fully implement the INTERNODES method and integrate it with the Akantu finite-element library. For a few years, Akantu has had one contact mechanics model implementation, that we will usually call the \textit{penalty method}. Our main objective was to provide a viable alternative for Akantu users. As such, we had multiple goals beyond the mere implementation of the INTERNODES method:
+\begin{itemize}
+    \item To make future developments easier and to keep the code neatly organized, the INTERNODES and penalty implementations should follow a similar structure and share as much code as possible.
+    \item To allow users to switch between the two methods easily, the Python interface for INTERNODES and penalty contact should be as close as possible.
+    \item Last but not least, the INTERNODES method implementation should be robustly implemented and well-tested to be useful in a variety of scenarios.
+\end{itemize}
+
+At this point, it is important to note that our work is the continuation of a Merge Request by Moritz Waldleben \cite{moritz} adding a partially complete Akantu C++ implementation of INTERNODES. We also had access to a Python implementation by Moritz Waldleben and an earlier MATLAB implementation by Yannis Voet \cite{voet} as references.
+
+We first cover how we finished the implementation of the INTERNODES method and how it fits within Akantu. We also briefly discuss the Python interface. Then, we discuss the tests that we wrote to validate and verify our implementation.
+
+\subsection{Implementation discussion}
+
+\subsubsection{Extended Python prototype}
+One of the first things we did was to refactor and extend Mortz Waldleben's Python reference implementation. This allowed us to better understand the method, and made prototyping easier. The implementation is available on c4science\footnote{\url{https://c4science.ch/source/INTERNODES-CM/}}.
+
+Thanks to this first step, we came up with validation tests that we later ported to C++ (see \refsec{subsec:experiments}).
+
+It is also thanks to this extended Python prototype that we noticed flaws in the previous implementations, particularly around the convergence check (i.e. equations \refequ{equ:convcheck1} and \refequ{equ:convcheck1}). Once we got the convergence check working in Python, we were then able to port it to C++. In general, the extended prototype was the testing ground for various improvements that made it into the C++ version.
+
+\subsubsection{C++ additions}
+\label{subsec:cppadditions}
+Let us first look at the code organization of the two contact mechanics models before our changes, which can be seen in \reffig{fig:contactdiagrams}.
+
+% TODO: turn these into UML diagrams matching the style of the report ?
+\begin{figure}[!htb]
+\centering
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=0.95\linewidth]{figures/penalty_diagram.pdf}
+  \caption{Penalty implementation diagram}
+  \label{fig:penaltydiagram}
+\end{subfigure}%
+\begin{subfigure}{.5\textwidth}
+  \centering
+  \includegraphics[width=0.95\linewidth]{figures/internodes_diagram.pdf}
+  \caption{INTERNODES implementation diagram}
+  \label{fig:internodesdiagram}
+\end{subfigure}
+\caption{Contact mechanics architectures.}
+\label{fig:contactdiagrams}
+\end{figure}
+
+The \texttt{ContactMechanicsModel} (i.e. the penalty method) was initially implemented as follows:
+\begin{itemize}
+    \item \texttt{ContactMechanicsModel} is the main class of that model.
+    \item \texttt{ContactDetector} handles the contact detection phase, i.e. finding out which elements of the two bodies are in contact.
+    \begin{itemize}
+        \item To avoid searching over all pairs, the contact detector uses a \texttt{SpatialGrid} to skip checking elements that are too far.
+    \end{itemize}
+    \item \texttt{CouplerSolidContactTemplate} takes care of the coupling between a solid mechanics model, and the penalty contact detector model.
+\end{itemize}
+
+The \texttt{ContactMechanicsInternodesModel} (i.e. the INTERNODES method) was initially implemented as follows:
+\begin{itemize}
+    \item \texttt{ContactMechanicsInternodesModel} is the main class of that model.
+    \item \texttt{ContactDetectorInternodes} handles the contact detection phase.
+    \begin{itemize}
+        \item No \texttt{SpatialGrid} is being used, so all pairs need to be checked.
+    \end{itemize}
+    \item The \texttt{ContactMechanicsInternodesModel} contains a \texttt{SolidMechanicsModel}. There is no separate coupler.
+\end{itemize}
+
+As a performance optimization and a first step toward shared abstraction, we changed \texttt{ContactDetectorInternodes} to use a \texttt{SpatialGrid}. With this we introduced \texttt{AbstractContactDetector}: a base class for contact detectors, containing mostly helper functions to build the spatial grids, and holding the updated positions vector used by both contact detectors. Unfortunately, we were not able to further refactor the contact detectors nor the contact models due to their largely different internal workings.
+
+The main architectural difference between penalty and INTERNODES is that in the former a coupler model manages all the interaction between the solid and the contact mechanics models, whereas in the latter the contact model directly references the solid model. We attempted to make INTERNODES use a coupler model too, but we found it too complicated. As a compromise, we ensured that the Python interfaces were very similar, so that a user could easily swap from one to the other, as seen in \reffig{fig:pythondiff}. In \refsec{subsec:coupler}, we discuss this in more detail and propose a comprehensive solution.
+
+\begin{figure}[!htb]
+\centering
+\begin{lstlisting}[language=diff]
+  mesh = aka.Mesh(spatial_dimension)
+  mesh.read(mesh_file)
+- model = aka.CouplerSolidContact(mesh)
++ model = aka.ContactMechanicsInternodesModel(mesh)
+  model.applyBC(...)
+  # and so on...
+\end{lstlisting}
+\caption{Moving from penalty to INTERNODES contact mechanics in Python.}
+\label{fig:pythondiff}
+\end{figure}
+
+Beyond architecture concerns, a crucial missing feature in the C++ implementation was the convergence check. We implemented it in C++ as we have explained in \refsec{subsec:contact-algorithm}. Even though they were loosely ported from the Python prototype, the functions \texttt{getInterfaceNormalAtNode}, \texttt{findPenetratingNodes}, and \texttt{updateAfterStep} are of particular interest.
+
+We also extended the INTERNODES method to work with 3D problems. The code is essentially the same, except for a difference in the computation of the interface normal.
+
+It should be noted that the number of active nodes, hence of DOFs (degrees of freedom), can change between two iterations. We were unable to resize an allocated DOFs vector with Akantu. As a workaround, we allocate enough DOFs for all possibly active nodes (i.e. the initial candidate sets). To preserve numerical stability for the system resolution, we use an identity submatrix for the inactive nodes.
+
+While we were implementing the above, we made a few important changes to the core of Akantu. We
+\begin{itemize}
+    \item fixed multiplication of a non-square matrix by a vector throwing an exception;
+    \item expanded \texttt{NodeGroup::applyNodeFilter} to accept lambdas and return how many elements were erased;
+    \item fixed undefined behavior in \texttt{NodeGroup::applyNodeFilter} and \texttt{Array::erase};
+    \item expanded \texttt{SpatialGrid} with helper methods to list values neighboring a specific cell and point;
+    \item added a few missing \texttt{const} markers.
+\end{itemize}
+
+\subsection{Experiments and tests}
+\label{subsec:experiments}
+
+In order to verify the correctness and the implementation and ensure the integrity of the code during development, a set of test cases were implemented. Each is a problem which can be solved analytically using the theory of Hertzian mechanics \cite{johnson}. This allows a comparison of certain quantities of interest with the approximation obtained with the INTERNODES method. 
+
+\subsubsection{Contact between a semispheres and a half-space}
+
+The first test case involves a semisphere being vertically pushed into a half-space both in two and three dimensions. The experimental setup is shown in \reffig{fig:sketch-plane-sphere}.
 
 \begin{figure}[ht]
     \centering
-     \input{plots/contact_radius_3d.pgf}
-     \caption{Contact radius}
-     \label{fig:contact-radius}
+    \input{figures/sketch_plane_sphere.tex}
+    \caption{Sketch of the first experimental setup used for testing.}
+    \label{fig:sketch-plane-sphere}
 \end{figure}
 
-\section{Adjacent work}
-\label{sec:adjacent}
+Below, the analytical quantities which are used to verify the implementation are defined. The symbols listed in \reftab{tab:symbols} are used.
+
+\begin{table}[ht]
+    \caption{Explanation of symbols}
+    \label{tab:symbols}
+    \centering
+    \input{tables/symbols.tex}
+\end{table}
+
+The radius of the contact area is given by
+\begin{equation}
+    a = \sqrt{Rd}
+    \label{equ:contact-radius}
+\end{equation}
+
+The amplitude of the contact pressure between the two interfaces is
+\begin{equation}
+    p_0 = \frac{E}{\pi(1 - \nu^2)} \sqrt{\frac{d}{R}}
+\end{equation}
+
+The normal displacement (i.e. the penetration depth of the semisphere into the half-space) is
+\begin{equation}
+    u_z = \frac{d}{2}
+    \label{equ:normal-displacement}
+\end{equation}
+
+We now run the Akantu implementation on one instance of this problem. For the two-dimensional case, \reffig{fig:solution-2d} shows the obtained solution for a single applied vertical displacement $d$. In \reffig{fig:normal-displacements} and \reffig{fig:contact-radius} we solve the same problem with a fixed mesh for multiple different displacements $d$ and plot the penetration depth $u_z$ and the radius of the contact are $a$, respectively. All quantities are normalized by the mesh size $h$ at the interface.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{\textwidth}
+     \input{plots/solution_2d.pgf}
+     \caption{The solution obtained from solving the problem. The mesh is refined around the interface in order to increase the precision.}
+     \label{fig:solution-2d}
+\end{subfigure}
+\begin{subfigure}[t]{.49\textwidth}
+    \hspace{12pt}
+    \input{plots/normal_displacement_2d.pgf}
+    \caption{Penetration depths $u_z$ for multiple vertical displacements $d$ scattered against the exact values obtained with \refequ{equ:normal-displacement}. The quantities are normalized by the mesh size $h$ at the interface.}
+    \label{fig:normal-displacements}
+\end{subfigure}
+\begin{subfigure}[t]{.49\textwidth}
+     \input{plots/contact_radius_2d.pgf}
+     \caption{Radii of contact areas $a$ for multiple vertical displacements $d$ scattered against the exact values obtained with \refequ{equ:contact-radius}. The quantities are normalized by the mesh size $h$ at the interface.}
+     \label{fig:contact-radius}
+\end{subfigure}
+\caption{Results obtained for a problem of the type sketched in \reffig{fig:sketch-plane-sphere}. For a fixed mesh of mesh size $h$ at the interface, multiple displacements $d$ are applied.}
+\label{fig:contact-plane-circle}
+\end{figure}
+
+A similar analysis is now done for the three dimensional case. Here, a sphere is pushed into a half-space, analogously to \reffig{fig:sketch-plane-sphere}, and the results are visualized in \reffig{fig:contact-plane-sphere}. Notice that in three dimensions the computation of the radius of the contact area is not as robust as in two dimensions, since we have more degrees of freedom. The error for said quantity, however, is still within two mesh sizes $h$, which is to be expected.
+
+\begin{figure}[H]
+\begin{subfigure}[t]{\textwidth}
+\centering
+    \includegraphics[scale=0.4, trim={5cm 3cm 6cm 3cm},clip]{figures/mesh3d.png}
+    \caption{Solution obtained from solving the problem. The color corresponds to the total displacement of the respective nodes. Orange is associated with a large displacement, while blue means the node was invariant.}
+    \label{fig:contact3d-plane-sphere}
+\end{subfigure}
+\begin{subfigure}[t]{.49\textwidth}
+    \input{plots/normal_displacement_3d.pgf}
+    \caption{Penetration depths $u_z$ for multiple vertical displacements $d$ scattered against the exact values obtained with \refequ{equ:normal-displacement}. The quantities are normalized by the mesh size $h$ at the interface.}
+    \label{fig:normal-displacements-3d}
+\end{subfigure}
+\begin{subfigure}[t]{.49\textwidth}
+     \input{plots/contact_radius_3d.pgf}
+     \caption{Radii of contact areas $a$ for multiple vertical displacements $d$ scattered against the exact values obtained with \refequ{equ:contact-radius}. The quantities are normalized by the mesh size $h$ at the interface.}
+     \label{fig:contact-radius-3d}
+\end{subfigure}
+\caption{Results for the three dimensional version of the problem sketched in \reffig{fig:sketch-plane-sphere}, i.e. a semisphere is pushed into a half-space. For a fixed mesh of mesh size $h$ at the interface, multiple displacements $d$ are applied.}
+\label{fig:contact-plane-sphere}
+\end{figure}
+
+\clearpage
+\subsubsection{Contact between two semispheres}
+
+The second test case models the contact between two semispheres (\reffig{fig:sketch-sphere-sphere}). 
+
+\begin{figure}[H]
+    \centering
+    \input{figures/sketch_sphere_sphere.tex}
+    \caption{Sketch of the second experimental setup where two semispheres are put into contact.}
+    \label{fig:sketch-sphere-sphere}
+\end{figure}
+
+In theory, the resulting interface is planar. This fact is used to verify the implementation by testing whether the deviation of the interface nodes from the theoretical contact plane is within a reasonable upper bound.
 
 \begin{figure}[ht]
+\begin{subfigure}[t]{.49\textwidth}
+    \centering
+    \input{plots/solution_circle_circle_2d.pgf}
+    \caption{Plot of the obtained solution.}
+    \label{fig:solution-circle-circle}
+\end{subfigure}
+\begin{subfigure}[t]{.49\textwidth}
+    \centering
+    \input{plots/zero_deviation.pgf}
+    \caption{Zoomed-in view of the interface nodes of both the primary and the secondary body. From theory we would expect them to describe a line. The axes are normalized by the mesh size $h$ at the interface.}
+    \label{fig:zero-deviation}
+\end{subfigure}
+\caption{Results for a two dimensional problem with two semicircles in contact.}
+\label{fig:contact-circle-circle}
+\end{figure}
+
+\clearpage
+\section{Further work}
+\label{sec:further}
+
+\subsection{Contact mechanics refactors}
+For a long time, Akantu only had a single implementation of contact mechanics, which is why its classes use generic names such as \texttt{ContactMechanicsModel} or \texttt{ContactDetector}. Now that there is a second contact mechanics implementation, we could simply rename the penalty method classes to more appropriate names, for example \texttt{ContactMechanicsPenaltyModel} or \texttt{ContactDetectorPenalty}. However, these renames should come with a larger refactor of the architecture of the contact mechanics package, that we will discuss in the next section.
+
+\subsection{Shared interface for both contact models}
+\label{subsec:coupler}
+
+As discussed in \refsec{subsec:cppadditions}, we attempted to refactor \texttt{CouplerSolidContact} to use it for the INTERNODES method. The attempt is accessible on the Akantu repository\footnote{\url{https://gitlab.com/akantu/akantu/-/commit/87d81a453d57f97546d166989c9a4dfa27cf19f6}}. While we were not successful, this allowed us to find an issue with the current architecture, and leads us to propose a solution...
+
+A key problem is that the \texttt{ContactMechanicsModel} (penalty method) extends \texttt{Model} even though it is not usable as a standalone model, and needs to be used through the \texttt{CouplerSolidContact}. Additionally, the \texttt{CouplerSolidContact} does not act as a standalone \texttt{Model}-\texttt{Model} coupler; it is quite tailored to the implementation details of \texttt{ContactMechanicsModel}. Hence, we should simply combine the two classes and make the resulting contact model contain the solid model.
+
+As such, we propose the following refactor:
+\begin{enumerate}
+    \item Move all the penalty contact mechanics code from \texttt{ContactMechanicsModel} to \texttt{CouplerSolidContact}, under a new name. To express that it's the penalty contact model, we suggest \texttt{ContactMechanicsPenaltyModel}.
+    \item Introduce a shared base class for \texttt{ContactMechanicsPenaltyModel} and \texttt{ContactMechanicsInternodesModel} that contains the solid model, and all the code that is common to all contact mechanics implementations.
+    \item Once that is done, to ensure that both methods can be used in all situations, it will be useful to go through the two contact mechanics model implementations, and validate that they work correctly with all the solver types.
+\end{enumerate}
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=1.0\linewidth]{diagrams/contact_refactor.pdf}
+    \caption{Proposed contact mechanics package refactor.}
+    \label{fig:contact_refactor}
+\end{figure}
+
+The final class diagram is on \reffig{fig:contact_refactor}. Here is a brief reminder of what each class is supposed to do in the final state:
+\begin{enumerate}
+    \item \texttt{Model}: base class for all models in Akantu, unchanged.
+    \item \texttt{ContactMechanicsModel}: base class for all contact mechanics implementations. Contains a \texttt{SolidMechanicsModel} instance, and all the methods that are relevant to all the contact models.
+    \item \texttt{ContactMechanicsPenaltyModel}: penalty contact mechanics model, fully handles both the contact and solid parts of the problem when \texttt{solveStep} is called.
+    \item \texttt{ContactMechanicsInternodesModel}: INTERNODES contact mechanics model, fully handles the contact and solid parts of the problem when \texttt{solveStep} is called. This will be quite similar to the current state of INTERNODES, with some of the methods moved to the superclass.
+\end{enumerate}
+
+%\clearpage
+%\subsection{Discussion}
+%\label{sec:discussion}
+
+%Flaws when same nodes that were dumped are added back in (no convergence) 
+
+%Usually interpenetrating nodes won't be considered part of interface in next iteration
+
+\clearpage
+\section{Conclusion}
+\label{sec:conclusion}
+In conclusion, we detailed how the INTERNODES method works, identified many shortcomings of the previous implementations, and improved upon them to deliver a robust and well-tested implementation in Akantu, in the hope that its users will find it suitable for further research in numerical contact mechanics.
+
+\clearpage
+\bibliography{biblio.bib}
+
+\clearpage
+\section*{Appendix}
+
+\subsection*{Refactor of penalty resolution classes}
+
+While working on the contact mechanics code written for Akantu, we have identified a lot (800+ lines) of shared code in the \texttt{Resolution} family of classes. These classes we then refactored according to the diagram sketched in \reffig{fig:resolution}. In order not to pay the cost for virtual calls, the refactor is done by creating a templated \texttt{ResolutionPenalty} class. This class is now easily extendable with other penalty function beyond the linear and quadratic one. The implementation can be found on a feature branch of Akantu\footnote{\url{https://gitlab.com/akantu/akantu/-/tree/features/modularize-resolution-penalty-classes}}.
+
+\begin{figure}[H]
     \centering
     \begin{subfigure}[b]{.49\linewidth}
         \centering
@@ -273,13 +624,8 @@ The weak formulation results in a linear system for the displacements $\mathbf{u
     \label{fig:resolution}
 \end{figure}
 
-\section{Discussion}
-\label{sec:discussion}
+%\subsection*{Development of rigorously tested Python implementation of the INTERNODES method}
 
-Flaws when same nodes that were dumped are added back in (no convergence) 
-
-Usually interpenetrating nodes won't be considered part of interface in next iteration
-
-\bibliography{biblio.bib}
+%In order to support and prototype the convergence check and the extension of the Akantu implementation to three dimensions, a Python reference implementation was developed. It was written in such a way that every function involved in the INTERNODES method is rigorously tested, and is hence suitable for prototyping. The code for this implementation is available on c4science\footnote{\url{https://c4science.ch/source/INTERNODES-CM/}}.
 
 \end{document}

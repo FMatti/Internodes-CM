@@ -13,7 +13,7 @@ def get_theoretical_normal_displacement(R, d, E, nu):
     a = get_theoretical_contact_radius(R, d)
     p0 = get_theoretical_pressure_amplitude(R, d, E, nu)
     K = np.pi / 2
-    return -(1 - nu**2) / E * K * p0 * a
+    return (1 - nu**2) / E * K * p0 * a
 
 def plot_mesh(
     ax,
@@ -46,14 +46,14 @@ def plot_mesh(
             nodal_positions[:, 1],
             triangles=connectivity_primary,
             color="#0e437c",
-            linewidth=0.25,
+            linewidth=0.5,
         )
         ax.triplot(
             nodal_positions[:, 0],
             nodal_positions[:, 1],
             triangles=connectivity_secondary,
             color="#d55209",
-            linewidth=0.25,
+            linewidth=0.5,
         )
     if nodes_candidate_primary is not None:
         ax.scatter(

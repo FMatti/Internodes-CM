@@ -1,0 +1,6 @@
+  mesh = aka.Mesh(spatial_dimension)
+  mesh.read(mesh_file)
+- model = aka.CouplerSolidContact(mesh)
++ model = aka.ContactMechanicsInternodesModel(mesh)
+  model.applyBC(...)
+  # and so on...
