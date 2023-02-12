@@ -1,6 +1,6 @@
 ![](https://img.shields.io/badge/status-finished-green?style=flat-square)
 ![](https://img.shields.io/badge/licence-MIT-green?style=flat-square)
-![](https://img.shields.io/badge/language-Python-blue?style=flat-square)
+![](https://img.shields.io/badge/language-Python_3.8-blue?style=flat-square)
 ![](https://img.shields.io/badge/requirement-akantu-blue?style=flat-square)
 
 # Internodes-CM
@@ -22,7 +22,7 @@ git clone https://github.com/FMatti/Internodes-CM.git
 cd Internodes-CM
 ```
 
-Optionally create and activate a virtual environment
+Optionally create and activate a virtual environment (Python 3.8 is recommended for pip installation of `akantu`)
 ```[bash]
 python -m venv .venv
 source .venv/bin/activate (on Linux, macOS)
