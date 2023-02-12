@@ -5,7 +5,7 @@
 
 # Internodes-CM
 
-Implementation of the internodes method for two- and three-dimensional problems in contact mechanics.
+Implementation of the INTERNODES method for two- and three-dimensional problems in contact mechanics.
 
 ## Introduction
 
